@@ -1,0 +1,13 @@
+# ники заменить на реальные; частные пути — ниже общих (побеждает последнее совпадение)
+*                         @lead
+/harness/tools/           @ml
+/harness/memory/          @ml
+/harness/ranking/         @ml
+/infra/                   @ml
+/evals/                   @da
+/ui/                      @designer
+/ui/pages/2_metrics.py    @da
+/harness/contracts.py     @lead
+/harness/constraints.py   @lead
+/harness/fakes.py         @lead
+/ui/client.py             @lead

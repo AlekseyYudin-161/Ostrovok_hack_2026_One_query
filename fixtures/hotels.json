@@ -1,0 +1,7 @@
+[
+  {"hotel_id": "fake-sochi-1", "name": "Морской бриз (FAKE)", "city": "Сочи", "price_total": 42000, "currency": "RUB", "rating": 8.7, "amenities": ["wifi", "pool", "beach"], "meal": "breakfast", "cancellation": "free_until_3d", "source_tool": "fake_hotel_search", "source_call_id": "fixture"},
+  {"hotel_id": "fake-sochi-2", "name": "Горный воздух (FAKE)", "city": "Сочи", "price_total": 61000, "currency": "RUB", "rating": 9.1, "amenities": ["wifi", "spa"], "meal": "all_inclusive", "cancellation": "non_refundable", "source_tool": "fake_hotel_search", "source_call_id": "fixture"},
+  {"hotel_id": "fake-spb-1", "name": "Невский двор (FAKE)", "city": "Санкт-Петербург", "price_total": 7600, "currency": "RUB", "rating": 8.2, "amenities": ["wifi"], "meal": null, "cancellation": "free_until_1d", "source_tool": "fake_hotel_search", "source_call_id": "fixture"},
+  {"hotel_id": "fake-spb-2", "name": "Эрмитажный (FAKE)", "city": "Санкт-Петербург", "price_total": 14500, "currency": "RUB", "rating": 9.4, "amenities": ["wifi", "breakfast"], "meal": "breakfast", "cancellation": "free_until_3d", "source_tool": "fake_hotel_search", "source_call_id": "fixture"},
+  {"hotel_id": "fake-kzn-1", "name": "Казанский кремль (FAKE)", "city": "Казань", "price_total": 9800, "currency": "RUB", "rating": 8.9, "amenities": ["wifi", "parking"], "meal": "breakfast", "cancellation": "free_until_1d", "source_tool": "fake_hotel_search", "source_call_id": "fixture"}
+]
