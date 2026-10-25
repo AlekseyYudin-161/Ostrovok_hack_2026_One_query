@@ -1,4 +1,4 @@
-"""Бейзлайн-агент на LangGraph, шаги 1–3 (DesignDoc §5).
+"""Бейзлайн-агент на LangGraph, шаги 1–3 + пересборка (DesignDoc §5, L11, L21).
 
 Граф:  understand → clarify
                   → out_of_scope → suggest_confirm (interrupt) → search | END      (вне Сочи, ADR-019)
@@ -9,12 +9,15 @@
        демо-оплата; дети и животные распознаются и показываются как допущения, пока поиск их не фильтрует.
 Шаг 3: запрос вне Большого Сочи → «работаем только по Сочи» + похожий район; даты (в т.ч. «на выходные»,
        «с 1 ноября» — от сегодняшней даты), взрослые, дети с возрастом; бюджет = проживание за весь срок на всех.
+Пересборка: в той же сессии «а если на 2 дня позже / дешевле / с нами собака / а в Хосте?» меняет только названное,
+       остальное сохраняется; «было → стало» — в ответе (changes). Правка из панели — `patch` (контракт 1.2), без LLM.
 Районы — из данных ML (`synth/data/areas.json`), пока их нет — встроенные 5 (`harness/areas.py`).
 Пока фейковое: поиск (FakeHotelSearch по fixtures).
 
 Включение: AGENT_BACKEND=graph. Модель — по переменным LLM_* (`harness/llm.py`); при LLM_PROVIDER=fake
 разбор идёт по правилам, без сети и без денег.
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +34,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
-from harness.areas import WISHES, Area, find_area, load_areas, suggest_area
+from harness.areas import WISHES, Area, find_area, find_by_name, load_areas, suggest_area
 from harness.contracts import (
     AgentAnswer,
     AgentEvent,
@@ -42,7 +45,7 @@ from harness.contracts import (
     LLMClient,
     TripRequest,
 )
-from harness.dates import WEEKDAYS_RU, month_from_text, parse_dates
+from harness.dates import WEEKDAYS_RU, month_from_text, parse_dates, parse_shift
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
 from harness.llm import build_llm, structured
 
@@ -160,10 +163,10 @@ def detect_other_place(low: str) -> str | None:
 def rules_parse(text: str, today: date) -> Understood:
     """Офлайн-разбор для LLM_PROVIDER=fake и запасной путь, если LLM не ответила по схеме."""
     low = text.lower()
-    named = next((a for a in AREA_LIST if a.name.lower() in low), None)
+    named = find_by_name(AREA_LIST, low)
     other = None if named else detect_other_place(low)
     area = named or (None if other else find_area(AREA_LIST, low))
-    m = re.search(r"до\s*(\d+)\s*(тыс|к)?", low)
+    m = re.search(r"(?:до|бюджет)\s*(\d+)\s*(тыс|к)?", low)
     budget = int(m.group(1)) * (1000 if m.group(2) else 1) if m else None
     checkin, checkout, _ = parse_dates(text, today)
     ages = [int(x) for x in re.findall(r"(\d{1,2})\s*(?:лет|год)", low)]
@@ -198,20 +201,19 @@ def _iso(value: str | None, today: date) -> date | None:
     return d if d is None or d >= today else None
 
 
-def assumptions_for(u: Understood, weekend_note: str | None) -> list[Assumption]:
+def request_assumptions(req: TripRequest, notes: list[str | None] = ()) -> list[Assumption]:
     """Что агент понял и как трактует — показываем, а не молчим (итерация №1)."""
     out = []
-    if u.budget_total:
-        out.append(Assumption(field="budget_total", value=u.budget_total,
-                              reason=f"Бюджет {rub(u.budget_total)} считаю на проживание за весь срок для всех гостей; "
+    if req.budget_total:
+        out.append(Assumption(field="budget_total", value=req.budget_total,
+                              reason=f"Бюджет {rub(req.budget_total)} считаю на проживание за весь срок для всех гостей; "
                                      "дорогу покажу отдельно."))
-    if weekend_note:
-        out.append(Assumption(field="dates", value="weekend", reason=weekend_note))
-    if u.with_kids:
-        ages = f" ({', '.join(str(a) for a in u.children_ages)} лет)" if u.children_ages else ""
-        out.append(Assumption(field="children", value=u.children_ages or True,
+    out += [Assumption(field="note", value=n, reason=n) for n in notes if n]
+    if req.children_ages or "с детьми" in req.preferences:
+        ages = f" ({', '.join(str(a) for a in req.children_ages)} лет)" if req.children_ages else ""
+        out.append(Assumption(field="children", value=req.children_ages or True,
                               reason=f"Учёл: едете с ребёнком{ages}. Фильтр «подходит для детей» пока не поддерживается."))
-    if u.pets:
+    if req.pets:
         out.append(Assumption(field="pets", value=True,
                               reason="Учёл: едете с животным. Фильтр «можно с животными» пока не поддерживается — "
                                      "уточните у отеля перед бронью."))
@@ -231,16 +233,105 @@ def to_trip_request(text: str, u: Understood, today: date) -> TripRequest:
     elif checkin and nights:
         checkout = checkin + timedelta(days=nights)
     weekend = weekend_note if (checkin, checkout) == (rule_in, rule_out) and weekend_note else None
-    return TripRequest(raw_text=text, destination=u.area, budget_total=u.budget_total, nights=nights,
+    req = TripRequest(raw_text=text, destination=u.area, budget_total=u.budget_total, nights=nights,
                        checkin=checkin, checkout=checkout, guests_adults=u.adults,
                        month=u.month or (checkin.month if checkin else None), children_ages=u.children_ages,
                        pets=u.pets, preferences=[*u.wishes, *(["с детьми"] if u.with_kids and "с детьми" not in u.wishes else [])],
-                       assumptions=assumptions_for(u, weekend),
                        missing_fields=[] if u.area else ["destination"])
+    req.assumptions = request_assumptions(req, [weekend])
+    return req
+
+
+# ---------- пересборка (L11) и правка из панели (L21) ----------
+FRESH_RE = re.compile(r"куда-нибудь|куда нибудь|друг(ую|ой|ое) поездк|нов(ую|ый) поиск|с нуля")
+CHEAPER_RE = re.compile(r"дешевле|бюджет\s+меньше|меньше\s+бюджет|подешевле")
+PATCH_FIELDS = {"destination", "checkin", "checkout", "nights", "guests_adults", "children_ages", "pets", "budget_total"}
+
+
+def _dates_label(r: TripRequest) -> str:
+    if r.checkin and r.checkout:
+        return f"{r.checkin:%d.%m}–{r.checkout:%d.%m}"
+    return f"{r.nights} ноч." if r.nights else "не заданы"
+
+
+def describe_changes(old: TripRequest, new: TripRequest) -> list[str]:
+    """«Было → стало» по полям, которые видит пользователь."""
+    rows = [("Район", old.destination or "—", new.destination or "—"),
+            ("Даты", _dates_label(old), _dates_label(new)),
+            ("Бюджет", rub(old.budget_total) if old.budget_total else "—",
+             rub(new.budget_total) if new.budget_total else "—"),
+            ("Взрослых", str(old.guests_adults or "—"), str(new.guests_adults or "—")),
+            ("Дети", ", ".join(map(str, old.children_ages)) or ("да" if "с детьми" in old.preferences else "нет"),
+             ", ".join(map(str, new.children_ages)) or ("да" if "с детьми" in new.preferences else "нет")),
+            ("Животные", "да" if old.pets else "нет", "да" if new.pets else "нет")]
+    return [f"{name}: {a} → {b}" for name, a, b in rows if a != b]
+
+
+def _finish(old: TripRequest, data: dict, notes: list[str | None]) -> tuple[TripRequest, list[str]]:
+    """Пересчитать ночи/выезд, допущения и список изменений после правки."""
+    new = TripRequest(**data)
+    if new.checkin and new.checkout and new.checkout > new.checkin:
+        new.nights = (new.checkout - new.checkin).days
+    elif new.checkin and new.nights:
+        new.checkout = new.checkin + timedelta(days=new.nights)
+    new.missing_fields = [] if new.destination else ["destination"]
+    new.assumptions = request_assumptions(new, notes)
+    return new, describe_changes(old, new)
+
+
+def merge_request(old: TripRequest, fresh: TripRequest, u: Understood, text: str) -> tuple[TripRequest, list[str]]:
+    """Пересборка по тексту: меняем только то, что пользователь назвал; остальное сохраняем (Constraint Retention)."""
+    data = old.model_dump()
+    data["raw_text"] = f"{old.raw_text} | {text}"
+    notes: list[str | None] = []
+    if fresh.destination:
+        data["destination"] = fresh.destination
+    shift = parse_shift(text)
+    if shift and old.checkin:
+        data["checkin"] = old.checkin + timedelta(days=shift)
+        data["checkout"] = old.checkout + timedelta(days=shift) if old.checkout else None
+    elif fresh.checkin:
+        data.update(checkin=fresh.checkin, checkout=fresh.checkout, nights=fresh.nights)
+    elif fresh.nights:
+        data.update(nights=fresh.nights, checkout=None)
+    if u.budget_total:
+        data["budget_total"] = u.budget_total
+    elif CHEAPER_RE.search(text.lower()) and old.budget_total:
+        data["budget_total"] = round(old.budget_total * 0.8 / 1000) * 1000
+        notes.append(f"«Дешевле» понял как бюджет −20%: {rub(data['budget_total'])}.")
+    if u.adults:
+        data["guests_adults"] = u.adults
+    if u.children_ages:
+        data["children_ages"] = u.children_ages
+    data["pets"] = old.pets or u.pets
+    data["preferences"] = list(dict.fromkeys([*old.preferences, *fresh.preferences]))
+    return _finish(old, data, notes)
+
+
+def apply_patch(old: TripRequest, patch: dict) -> tuple[TripRequest, list[str]]:
+    """Правка из панели параметров: только разрешённые поля; неизвестный район и мусор — игнорируем с логом."""
+    data = old.model_dump()
+    for key, value in patch.items():
+        if key not in PATCH_FIELDS:
+            log.warning("patch: поле %r не поддерживается — пропускаю", key)
+            continue
+        if key == "destination" and value not in AREAS:
+            log.warning("patch: неизвестный район %r — пропускаю", value)
+            continue
+        data[key] = value
+    if "checkin" in patch and "checkout" not in patch and "nights" not in patch and old.nights:
+        data["checkout"] = None          # сдвинули заезд — выезд пересчитаем по числу ночей
+    try:
+        return _finish(old, data, [])
+    except ValueError:
+        log.warning("patch: некорректные значения %s — оставляю как было", patch)
+        return old, []
 
 
 class State(TypedDict, total=False):
     text: str
+    patch: dict | None
+    changes: list[str]
     other_destination: str | None
     request: dict
     hotels: list[dict]
@@ -263,10 +354,22 @@ class GraphAgent:
         return self._today or date.today()
 
     async def _understand(self, state: State) -> State:
-        u = await understand_text(self.llm, state["text"], self.today)
+        prev = TripRequest(**state["request"]) if state.get("request") else None
+        if state.get("patch") and prev:                          # правка из панели — без LLM
+            req, changes = apply_patch(prev, state["patch"])
+            log.info("patch: %s → %s", state["patch"], changes)
+            return {"request": req.model_dump(mode="json"), "hotels": [], "changes": changes, "other_destination": None}
+        text = state["text"]
+        u = await understand_text(self.llm, text, self.today)
         log.info("understand: %s", u.model_dump())
-        return {"request": to_trip_request(state["text"], u, self.today).model_dump(mode="json"), "hotels": [],
-                "other_destination": None if u.area else u.other_destination}
+        fresh = to_trip_request(text, u, self.today)
+        if prev and prev.destination and not u.other_destination and not FRESH_RE.search(text.lower()):
+            req, changes = merge_request(prev, fresh, u, text)     # пересборка, а не поиск с нуля
+            log.info("replan: %s", changes)
+        else:
+            req, changes = fresh, []
+        return {"request": req.model_dump(mode="json"), "hotels": [], "changes": changes,
+                "other_destination": None if req.destination else u.other_destination}
 
     @staticmethod
     def _route_understand(state: State) -> str:
@@ -324,8 +427,10 @@ class GraphAgent:
     async def _no_solution(self, state: State) -> State:
         req = TripRequest(**state["request"])
         limit = f" до {rub(req.budget_total)}" if req.budget_total else ""
-        answer = AgentAnswer(mode=AgentMode.NO_SOLUTION, assumptions=req.assumptions,
-                             text=(f"{trip_summary(req)}\n" if trip_summary(req) else "")
+        changed = ("Изменил: " + "; ".join(state["changes"]) + ".\n") if state.get("changes") else ""
+        changed += "".join(f"{a.reason}\n" for a in req.assumptions if a.field == "note")
+        answer = AgentAnswer(mode=AgentMode.NO_SOLUTION, assumptions=req.assumptions, changes=state.get("changes", []),
+                             text=(f"{trip_summary(req)}\n" if trip_summary(req) else "") + changed
                                   + f"{req.destination}: нет вариантов{limit}. "
                                   "Поднять бюджет или посмотреть другой район?")
         return {"answer": answer.model_dump(mode="json")}
@@ -338,11 +443,14 @@ class GraphAgent:
         n = len(hotels)
         lines = [f"{req.destination}: нашёл {n} {plural(n, 'вариант', 'варианта', 'вариантов')} (демо-данные)."]
         lines += [x for x in [trip_summary(req)] if x]
+        if state.get("changes"):
+            lines.append("Изменил: " + "; ".join(state["changes"]) + ".")
         lines += [a.reason for a in req.assumptions]
         lines.append(f"Оформить «{best.name}» за {rub(best.price_total or 0)}? Ответьте «да» или «нет» (демо-оплата).")
         pending = {"tool": "purchase_mock", "hotel_id": best.hotel_id, "name": best.name,
                    "price_total": best.price_total, "source_call_id": best.source_call_id}
         answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, text="\n".join(lines), candidates=hotels[:3],
+                             changes=state.get("changes", []),
                              assumptions=req.assumptions, pending_action=pending)
         return {"answer": answer.model_dump(mode="json")}
 
@@ -406,21 +514,21 @@ class GraphAgent:
             cfg["callbacks"] = [CallbackHandler()]
         return cfg
 
-    async def _graph_input(self, text: str, cfg: dict) -> dict | Command:
-        """Если граф ждёт «да/нет» и пользователь ответил да/нет — продолжаем паузу, иначе — новый запрос."""
+    async def _graph_input(self, text: str, cfg: dict, patch: dict | None) -> dict | Command:
+        """Ответ «да/нет» на паузу — продолжаем граф; иначе — новый ход (текст или правка из панели)."""
         snapshot = await self.graph.aget_state(cfg)
-        if snapshot.next in (("confirm",), ("suggest_confirm",)) and yes_no(text) is not None:
+        if not patch and snapshot.next in (("confirm",), ("suggest_confirm",)) and yes_no(text) is not None:
             return Command(resume=text)
-        return {"text": text}
+        return {"text": text, "patch": patch}
 
-    async def stream(self, text: str, session_id: str) -> AsyncIterator[AgentEvent]:
+    async def stream(self, text: str, session_id: str, patch: dict | None = None) -> AsyncIterator[AgentEvent]:
         run_id = uuid.uuid4().hex[:12]
 
         def ev(type_: str, node: str | None = None, **payload) -> AgentEvent:
             return AgentEvent(run_id=run_id, ts=datetime.now(UTC), type=type_, node=node, payload=payload)
 
         cfg = self._config(session_id)
-        graph_input = await self._graph_input(text, cfg)
+        graph_input = await self._graph_input(text, cfg, patch)
         resumed = isinstance(graph_input, Command)
         yield ev("plan", "graph", resumed=resumed,
                  steps=["resume"] if resumed else ["understand", "clarify|out_of_scope|search", "offer", "confirm"])
@@ -440,6 +548,8 @@ class GraphAgent:
                 if "request" in out:
                     request = out["request"]
                     yield ev("node_start", node, request=request)
+                if out.get("changes"):
+                    yield ev("replan", node, changes=out["changes"], request=request)
                 if out.get("hotels"):
                     yield ev("tool_result", node, tool=self.search_tool.name, ok=True, n=len(out["hotels"]))
                 if "answer" in out:
@@ -456,10 +566,10 @@ class GraphAgent:
         if held is not None:
             yield held
 
-    async def run(self, text: str, session_id: str) -> AgentRun:
+    async def run(self, text: str, session_id: str, patch: dict | None = None) -> AgentRun:
         started = time.perf_counter()
         last_answer: AgentEvent | None = None
-        async for event in self.stream(text, session_id):
+        async for event in self.stream(text, session_id, patch):
             log.debug("event %s %s", event.type, event.node)
             if event.type == "answer":
                 last_answer = event
