@@ -1,0 +1,111 @@
+{
+ "sold_out": [
+  {
+   "hotel_ids": [
+    "h_imeretinka_002",
+    "h_imeretinka_005",
+    "h_imeretinka_012",
+    "h_imeretinka_013",
+    "h_imeretinka_014",
+    "h_imeretinka_017"
+   ],
+   "from": "2026-12-30",
+   "to": "2027-01-03",
+   "reason": "новогодний пик: pet-friendly в Сириусе раскуплены"
+  },
+  {
+   "hotel_ids": [
+    "h_adler_020"
+   ],
+   "from": "2026-11-13",
+   "to": "2026-11-16",
+   "reason": "лучший по рейтингу отель Адлера занят на выходные"
+  },
+  {
+   "hotel_ids": [
+    "h_rosa_khutor_004"
+   ],
+   "from": "2027-02-20",
+   "to": "2027-02-24",
+   "reason": "курорты Розы Хутор раскуплены на 23 февраля"
+  }
+ ],
+ "seasonal_closures": [
+  {
+   "hotel_ids": [
+    "h_lazarevskoe_005",
+    "h_lazarevskoe_006",
+    "h_lazarevskoe_010",
+    "h_lazarevskoe_013",
+    "h_lazarevskoe_015",
+    "h_loo_005",
+    "h_loo_009",
+    "h_loo_011",
+    "h_loo_012"
+   ],
+   "months": [
+    11,
+    12,
+    1,
+    2,
+    3,
+    4
+   ],
+   "reason": "гостевые дома на северном побережье закрыты зимой"
+  },
+  {
+   "hotel_ids": [
+    "h_krasnaya_polyana_009",
+    "h_krasnaya_polyana_014"
+   ],
+   "months": [
+    11,
+    12,
+    1,
+    2,
+    3
+   ],
+   "reason": "глэмпинг работает только в тёплый сезон"
+  }
+ ],
+ "cancelled_departures": [
+  {
+   "schedule_id": "fl_moskva_o0",
+   "dates": [
+    "2026-11-20",
+    "2026-11-21"
+   ],
+   "reason": "погода"
+  },
+  {
+   "schedule_id": "fl_moskva_r0",
+   "dates": [
+    "2026-11-27"
+   ],
+   "reason": "техническая причина"
+  }
+ ],
+ "no_seats": [
+  {
+   "schedule_id": "fl_moskva_o0",
+   "dates": [
+    "2026-12-30",
+    "2026-12-31"
+   ]
+  },
+  {
+   "schedule_id": "fl_moskva_o1",
+   "dates": [
+    "2026-12-30",
+    "2026-12-31"
+   ]
+  },
+  {
+   "schedule_id": "fl_moskva_o2",
+   "dates": [
+    "2026-12-30",
+    "2026-12-31"
+   ]
+  }
+ ]
+}

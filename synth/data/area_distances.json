@@ -1,0 +1,902 @@
+[
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "aer",
+  "km": 100.0,
+  "coast_km": 96.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 165
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_lazarevskaya",
+  "km": 0.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 10
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_loo",
+  "km": 46.3,
+  "coast_km": 46.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 80
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_dagomys",
+  "km": 55.4,
+  "coast_km": 55.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 95
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_sochi",
+  "km": 70.6,
+  "coast_km": 70.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 115
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_matsesta",
+  "km": 77.3,
+  "coast_km": 77.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 125
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_khosta",
+  "km": 84.3,
+  "coast_km": 84.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 135
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_adler",
+  "km": 97.5,
+  "coast_km": 96.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 160
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_olympic_park",
+  "km": 104.0,
+  "coast_km": 103.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 165
+ },
+ {
+  "area_id": "lazarevskoe",
+  "point_id": "st_esto_sadok",
+  "km": 142.8,
+  "coast_km": 96.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 205
+ },
+ {
+  "area_id": "loo",
+  "point_id": "aer",
+  "km": 54.0,
+  "coast_km": 50.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 95
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_lazarevskaya",
+  "km": 46.5,
+  "coast_km": 46.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 80
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_loo",
+  "km": 0.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 10
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_dagomys",
+  "km": 9.4,
+  "coast_km": 9.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 25
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_sochi",
+  "km": 24.6,
+  "coast_km": 24.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 50
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_matsesta",
+  "km": 31.3,
+  "coast_km": 31.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 60
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_khosta",
+  "km": 38.3,
+  "coast_km": 38.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 70
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_adler",
+  "km": 51.5,
+  "coast_km": 50.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 90
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_olympic_park",
+  "km": 58.0,
+  "coast_km": 57.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 100
+ },
+ {
+  "area_id": "loo",
+  "point_id": "st_esto_sadok",
+  "km": 96.8,
+  "coast_km": 50.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 140
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "aer",
+  "km": 45.0,
+  "coast_km": 41.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 80
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_lazarevskaya",
+  "km": 55.5,
+  "coast_km": 55.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 95
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_loo",
+  "km": 9.3,
+  "coast_km": 9.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 25
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_dagomys",
+  "km": 0.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 10
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_sochi",
+  "km": 15.6,
+  "coast_km": 15.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 35
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_matsesta",
+  "km": 22.3,
+  "coast_km": 22.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 45
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_khosta",
+  "km": 29.3,
+  "coast_km": 29.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 55
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_adler",
+  "km": 42.5,
+  "coast_km": 41.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 75
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_olympic_park",
+  "km": 49.0,
+  "coast_km": 48.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 85
+ },
+ {
+  "area_id": "dagomys",
+  "point_id": "st_esto_sadok",
+  "km": 87.8,
+  "coast_km": 41.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 125
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "aer",
+  "km": 30.0,
+  "coast_km": 26.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 60
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_lazarevskaya",
+  "km": 70.5,
+  "coast_km": 70.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 115
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_loo",
+  "km": 24.3,
+  "coast_km": 24.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 45
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_dagomys",
+  "km": 15.4,
+  "coast_km": 15.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 35
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_sochi",
+  "km": 0.6,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 10
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_matsesta",
+  "km": 7.3,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 20
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_khosta",
+  "km": 14.3,
+  "coast_km": 14.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 30
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_adler",
+  "km": 27.5,
+  "coast_km": 26.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 55
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_olympic_park",
+  "km": 34.0,
+  "coast_km": 33.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 60
+ },
+ {
+  "area_id": "sochi_center",
+  "point_id": "st_esto_sadok",
+  "km": 72.8,
+  "coast_km": 26.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 100
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "aer",
+  "km": 23.0,
+  "coast_km": 19.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 50
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_lazarevskaya",
+  "km": 77.5,
+  "coast_km": 77.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 125
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_loo",
+  "km": 31.3,
+  "coast_km": 31.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 60
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_dagomys",
+  "km": 22.4,
+  "coast_km": 22.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 45
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_sochi",
+  "km": 7.6,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 20
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_matsesta",
+  "km": 0.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 10
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_khosta",
+  "km": 7.3,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 20
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_adler",
+  "km": 20.5,
+  "coast_km": 19.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 45
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_olympic_park",
+  "km": 27.0,
+  "coast_km": 26.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 50
+ },
+ {
+  "area_id": "matsesta",
+  "point_id": "st_esto_sadok",
+  "km": 65.8,
+  "coast_km": 19.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 90
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "aer",
+  "km": 16.0,
+  "coast_km": 12.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 40
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_lazarevskaya",
+  "km": 84.5,
+  "coast_km": 84.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 140
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_loo",
+  "km": 38.3,
+  "coast_km": 38.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 70
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_dagomys",
+  "km": 29.4,
+  "coast_km": 29.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 55
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_sochi",
+  "km": 14.6,
+  "coast_km": 14.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 35
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_matsesta",
+  "km": 7.3,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 20
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_khosta",
+  "km": 0.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 10
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_adler",
+  "km": 13.5,
+  "coast_km": 12.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 30
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_olympic_park",
+  "km": 20.0,
+  "coast_km": 19.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 40
+ },
+ {
+  "area_id": "khosta",
+  "point_id": "st_esto_sadok",
+  "km": 58.8,
+  "coast_km": 12.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 80
+ },
+ {
+  "area_id": "adler",
+  "point_id": "aer",
+  "km": 4.0,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 20
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_lazarevskaya",
+  "km": 96.5,
+  "coast_km": 96.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 155
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_loo",
+  "km": 50.3,
+  "coast_km": 50.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 85
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_dagomys",
+  "km": 41.4,
+  "coast_km": 41.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 75
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_sochi",
+  "km": 26.6,
+  "coast_km": 26.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 50
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_matsesta",
+  "km": 19.3,
+  "coast_km": 19.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 40
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_khosta",
+  "km": 12.3,
+  "coast_km": 12.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 30
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_adler",
+  "km": 1.5,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 15
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_olympic_park",
+  "km": 8.0,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 25
+ },
+ {
+  "area_id": "adler",
+  "point_id": "st_esto_sadok",
+  "km": 46.8,
+  "coast_km": 0.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 65
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "aer",
+  "km": 11.0,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 4.0,
+  "drive_min": 30
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_lazarevskaya",
+  "km": 103.5,
+  "coast_km": 103.0,
+  "mountain_km": 0.0,
+  "local_km": 0.5,
+  "drive_min": 165
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_loo",
+  "km": 57.3,
+  "coast_km": 57.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 95
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_dagomys",
+  "km": 48.4,
+  "coast_km": 48.0,
+  "mountain_km": 0.0,
+  "local_km": 0.4,
+  "drive_min": 85
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_sochi",
+  "km": 33.6,
+  "coast_km": 33.0,
+  "mountain_km": 0.0,
+  "local_km": 0.6,
+  "drive_min": 60
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_matsesta",
+  "km": 26.3,
+  "coast_km": 26.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 50
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_khosta",
+  "km": 19.3,
+  "coast_km": 19.0,
+  "mountain_km": 0.0,
+  "local_km": 0.3,
+  "drive_min": 40
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_adler",
+  "km": 8.5,
+  "coast_km": 7.0,
+  "mountain_km": 0.0,
+  "local_km": 1.5,
+  "drive_min": 25
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_olympic_park",
+  "km": 1.0,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 1.0,
+  "drive_min": 15
+ },
+ {
+  "area_id": "imeretinka",
+  "point_id": "st_esto_sadok",
+  "km": 53.8,
+  "coast_km": 7.0,
+  "mountain_km": 46.0,
+  "local_km": 0.8,
+  "drive_min": 75
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "aer",
+  "km": 44.0,
+  "coast_km": 0.0,
+  "mountain_km": 40.0,
+  "local_km": 4.0,
+  "drive_min": 65
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_lazarevskaya",
+  "km": 136.5,
+  "coast_km": 96.0,
+  "mountain_km": 40.0,
+  "local_km": 0.5,
+  "drive_min": 200
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_loo",
+  "km": 90.3,
+  "coast_km": 50.0,
+  "mountain_km": 40.0,
+  "local_km": 0.3,
+  "drive_min": 130
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_dagomys",
+  "km": 81.4,
+  "coast_km": 41.0,
+  "mountain_km": 40.0,
+  "local_km": 0.4,
+  "drive_min": 115
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_sochi",
+  "km": 66.6,
+  "coast_km": 26.0,
+  "mountain_km": 40.0,
+  "local_km": 0.6,
+  "drive_min": 95
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_matsesta",
+  "km": 59.3,
+  "coast_km": 19.0,
+  "mountain_km": 40.0,
+  "local_km": 0.3,
+  "drive_min": 85
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_khosta",
+  "km": 52.3,
+  "coast_km": 12.0,
+  "mountain_km": 40.0,
+  "local_km": 0.3,
+  "drive_min": 75
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_adler",
+  "km": 41.5,
+  "coast_km": 0.0,
+  "mountain_km": 40.0,
+  "local_km": 1.5,
+  "drive_min": 60
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_olympic_park",
+  "km": 48.0,
+  "coast_km": 7.0,
+  "mountain_km": 40.0,
+  "local_km": 1.0,
+  "drive_min": 65
+ },
+ {
+  "area_id": "krasnaya_polyana",
+  "point_id": "st_esto_sadok",
+  "km": 8.8,
+  "coast_km": 0.0,
+  "mountain_km": 8.0,
+  "local_km": 0.8,
+  "drive_min": 20
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "aer",
+  "km": 50.0,
+  "coast_km": 0.0,
+  "mountain_km": 46.0,
+  "local_km": 4.0,
+  "drive_min": 70
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_lazarevskaya",
+  "km": 142.5,
+  "coast_km": 96.0,
+  "mountain_km": 46.0,
+  "local_km": 0.5,
+  "drive_min": 205
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_loo",
+  "km": 96.3,
+  "coast_km": 50.0,
+  "mountain_km": 46.0,
+  "local_km": 0.3,
+  "drive_min": 135
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_dagomys",
+  "km": 87.4,
+  "coast_km": 41.0,
+  "mountain_km": 46.0,
+  "local_km": 0.4,
+  "drive_min": 125
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_sochi",
+  "km": 72.6,
+  "coast_km": 26.0,
+  "mountain_km": 46.0,
+  "local_km": 0.6,
+  "drive_min": 100
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_matsesta",
+  "km": 65.3,
+  "coast_km": 19.0,
+  "mountain_km": 46.0,
+  "local_km": 0.3,
+  "drive_min": 90
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_khosta",
+  "km": 58.3,
+  "coast_km": 12.0,
+  "mountain_km": 46.0,
+  "local_km": 0.3,
+  "drive_min": 80
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_adler",
+  "km": 47.5,
+  "coast_km": 0.0,
+  "mountain_km": 46.0,
+  "local_km": 1.5,
+  "drive_min": 65
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_olympic_park",
+  "km": 54.0,
+  "coast_km": 7.0,
+  "mountain_km": 46.0,
+  "local_km": 1.0,
+  "drive_min": 75
+ },
+ {
+  "area_id": "rosa_khutor",
+  "point_id": "st_esto_sadok",
+  "km": 0.8,
+  "coast_km": 0.0,
+  "mountain_km": 0.0,
+  "local_km": 0.8,
+  "drive_min": 10
+ }
+]

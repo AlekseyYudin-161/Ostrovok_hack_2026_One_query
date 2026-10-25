@@ -1,0 +1,82 @@
+[
+ {
+  "point_id": "aer",
+  "type": "airport",
+  "name": "Аэропорт Сочи (Адлер)",
+  "area_id": "adler",
+  "offset_km": 4.0,
+  "long_distance": false
+ },
+ {
+  "point_id": "st_lazarevskaya",
+  "type": "railway_station",
+  "name": "Вокзал Лазаревская",
+  "area_id": "lazarevskoe",
+  "offset_km": 0.5,
+  "long_distance": true
+ },
+ {
+  "point_id": "st_loo",
+  "type": "local_station",
+  "name": "Станция Лоо",
+  "area_id": "loo",
+  "offset_km": 0.3,
+  "long_distance": false
+ },
+ {
+  "point_id": "st_dagomys",
+  "type": "local_station",
+  "name": "Станция Дагомыс",
+  "area_id": "dagomys",
+  "offset_km": 0.4,
+  "long_distance": false
+ },
+ {
+  "point_id": "st_sochi",
+  "type": "railway_station",
+  "name": "Вокзал Сочи",
+  "area_id": "sochi_center",
+  "offset_km": 0.6,
+  "long_distance": true
+ },
+ {
+  "point_id": "st_matsesta",
+  "type": "local_station",
+  "name": "Станция Мацеста",
+  "area_id": "matsesta",
+  "offset_km": 0.3,
+  "long_distance": false
+ },
+ {
+  "point_id": "st_khosta",
+  "type": "local_station",
+  "name": "Станция Хоста",
+  "area_id": "khosta",
+  "offset_km": 0.3,
+  "long_distance": false
+ },
+ {
+  "point_id": "st_adler",
+  "type": "railway_station",
+  "name": "Вокзал Адлер",
+  "area_id": "adler",
+  "offset_km": 1.5,
+  "long_distance": true
+ },
+ {
+  "point_id": "st_olympic_park",
+  "type": "railway_station",
+  "name": "Станция Олимпийский парк",
+  "area_id": "imeretinka",
+  "offset_km": 1.0,
+  "long_distance": true
+ },
+ {
+  "point_id": "st_esto_sadok",
+  "type": "local_station",
+  "name": "Станция Роза Хутор (Эсто-Садок)",
+  "area_id": "rosa_khutor",
+  "offset_km": 0.8,
+  "long_distance": false
+ }
+]
