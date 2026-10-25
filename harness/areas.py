@@ -6,6 +6,7 @@
   * переменная не задана     — synth/data/areas.json, если он есть в репо, иначе встроенные 5.
 Синонимы («Сириус» → Имеретинка) берутся из поля `aliases` файла ML; пока его нет — из BUILTIN_ALIASES.
 """
+
 from __future__ import annotations
 
 import json
@@ -68,13 +69,21 @@ def load_areas(path: str | Path | None = None) -> list[Area]:
     return areas or BUILTIN
 
 
-def find_area(areas: list[Area], text: str) -> Area | None:
-    """Район по названию или синониму, встреченному в тексте (для правил и для проверки ответа LLM)."""
+def name_stem(area: Area) -> str:
+    """Основа названия для падежей: «Хоста» → «хост» (в Хосте), «Адлер» → «адле» (в Адлере)."""
+    low = area.name.lower()
+    return low[:-1] if " " not in low and "-" not in low and len(low) >= 5 else low
+
+
+def find_by_name(areas: list[Area], text: str) -> Area | None:
     low = text.lower()
-    for a in areas:
-        if a.name.lower() in low:
-            return a
-    return next((a for a in areas if any(al in low for al in a.aliases)), None)
+    return next((a for a in areas if name_stem(a) in low), None)
+
+
+def find_area(areas: list[Area], text: str) -> Area | None:
+    """Район по названию (с учётом падежа) или синониму, встреченному в тексте (для офлайн-правил)."""
+    low = text.lower()
+    return find_by_name(areas, low) or next((a for a in areas if any(al in low for al in a.aliases)), None)
 
 
 def suggest_area(areas: list[Area], wishes: list[str]) -> Area:

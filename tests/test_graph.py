@@ -1,4 +1,5 @@
 """Бейзлайн-граф (шаги 1–3): офлайн на правилах, путь через LLM по схеме, пауза перед покупкой."""
+
 import json
 from datetime import date
 
@@ -191,7 +192,8 @@ async def test_dates_guests_budget_in_request() -> None:
 async def test_weekend_assumption_visible() -> None:
     run = await GraphAgent(FakeLLM(), today=TODAY).run("Адлер на выходные до 50 тыс", "s-wknd")
     assert str(run.request.checkin) == "2026-10-30" and run.request.nights == 2
-    assert "«На выходные» понял как 30.10" in run.answer.text
+    assert "Поездка: 30.10–01.11, 2 ночи." in run.answer.text
+    assert "«На выходные» понял как пятница — воскресенье" in run.answer.text
 
 
 def test_areas_from_ml_file(tmp_path) -> None:
@@ -212,3 +214,76 @@ def test_trip_summary_forms() -> None:
     assert trip_summary(TripRequest(raw_text="x")) is None
     r = TripRequest(raw_text="x", nights=1, guests_adults=1, children_ages=[3, 7], pets=True)
     assert trip_summary(r) == "Поездка: 1 ночь · 1 взрослый + 2 ребёнка (3, 7 лет) + с животным."
+
+
+# ---------- пересборка (L11) и правка из панели (L21) ----------
+BASE = "Адлер с 1 ноября на неделю, вдвоём и ребёнок 5 лет, с собакой, до 50 тыс"
+
+
+@pytest.mark.asyncio
+async def test_replan_shift_keeps_everything_else() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    await agent.run(BASE, "s-shift")
+    run = await agent.run("а если на два дня позже?", "s-shift")
+    r = run.request
+    assert (str(r.checkin), str(r.checkout), r.nights) == ("2026-11-03", "2026-11-10", 7)
+    assert r.destination == "Адлер" and r.budget_total == 50000 and r.guests_adults == 2
+    assert r.children_ages == [5] and r.pets is True                                 # Constraint Retention
+    assert run.answer.changes == ["Даты: 01.11–08.11 → 03.11–10.11"]
+    assert "Изменил: Даты: 01.11–08.11 → 03.11–10.11." in run.answer.text
+
+
+@pytest.mark.asyncio
+async def test_replan_cheaper_and_new_budget() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    await agent.run(BASE, "s-cheap")
+    run = await agent.run("а подешевле?", "s-cheap")
+    assert run.request.budget_total == 40000 and "−20%" in run.answer.text
+    run = await agent.run("бюджет 45 тыс", "s-cheap")
+    assert run.request.budget_total == 45000 and run.request.checkin == date(2026, 11, 1)
+
+
+@pytest.mark.asyncio
+async def test_replan_add_pet_and_change_area() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    await agent.run("Адлер с 1 ноября на неделю до 70 тыс", "s-pet")
+    run = await agent.run("с нами едет собака", "s-pet")
+    assert run.request.pets is True and "Животные: нет → да" in run.answer.changes
+    run = await agent.run("а если в Хосте?", "s-pet")
+    assert run.request.destination == "Хоста" and run.request.pets is True
+    assert str(run.request.checkin) == "2026-11-01" and "Район: Адлер → Хоста" in run.answer.changes
+
+
+@pytest.mark.asyncio
+async def test_fresh_search_resets() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    await agent.run(BASE, "s-fresh")
+    run = await agent.run("хочу куда-нибудь на выходные", "s-fresh")
+    assert run.answer.mode.value == "clarify" and run.request.pets is False and not run.answer.changes
+
+
+@pytest.mark.asyncio
+async def test_patch_from_panel() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    await agent.run(BASE, "s-patch")
+    run = await agent.run("", "s-patch", patch={"checkin": "2026-11-05", "budget_total": 70000, "pets": False,
+                                                "hacker": "x", "destination": "Атлантида"})
+    r = run.request
+    assert (str(r.checkin), str(r.checkout), r.budget_total, r.pets) == ("2026-11-05", "2026-11-12", 70000, False)
+    assert r.destination == "Адлер" and r.children_ages == [5]           # неизвестные поле и район — пропущены
+    assert "Бюджет: 50 000 ₽ → 70 000 ₽" in run.answer.changes and run.answer.mode.value == "confirm_action"
+
+
+@pytest.mark.asyncio
+async def test_patch_via_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "fake")
+    app.state.agent = GraphAgent(today=TODAY)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        await c.post("/chat", json={"text": "Адлер до 50 тыс", "session_id": "s-api-patch"})
+        r = await c.post("/chat", json={"session_id": "s-api-patch", "patch": {"destination": "Хоста"}})
+        bad = await c.post("/chat", json={"session_id": "s-api-patch"})
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
+    assert "replan" in [e["type"] for e in events]
+    assert events[-1]["payload"]["request"]["destination"] == "Хоста"
+    assert bad.status_code == 422                                          # ни text, ни patch

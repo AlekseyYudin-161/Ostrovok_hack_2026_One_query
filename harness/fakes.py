@@ -3,6 +3,7 @@
 Правило команды: пока настоящая реализация не влита в main, все работают против этих фейков.
 Фейки детерминированы — на них гоняются CI и eval-smoke.
 """
+
 from __future__ import annotations
 
 import json
@@ -115,7 +116,7 @@ class FakeAgent:
         return TripRequest(raw_text=text, destination=city,
                            missing_fields=[] if city else ["destination"])
 
-    async def stream(self, text: str, session_id: str) -> AsyncIterator[AgentEvent]:
+    async def stream(self, text: str, session_id: str, patch: dict | None = None) -> AsyncIterator[AgentEvent]:
         run_id = uuid.uuid4().hex[:12]
 
         def ev(type_: str, node: str | None = None, **payload) -> AgentEvent:
@@ -137,7 +138,7 @@ class FakeAgent:
                              candidates=hotels[:3])
         yield ev("answer", "answer", answer=answer.model_dump(mode="json"), request=request.model_dump(mode="json"))
 
-    async def run(self, text: str, session_id: str) -> AgentRun:
+    async def run(self, text: str, session_id: str, patch: dict | None = None) -> AgentRun:
         started = time.perf_counter()
         last: AgentEvent | None = None
         async for last in self.stream(text, session_id):

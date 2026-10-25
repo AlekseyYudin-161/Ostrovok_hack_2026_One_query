@@ -3,6 +3,7 @@
 Все относительные даты считаются от `today` (передаётся явно — так тесты не зависят от календаря).
 Соглашение: «на выходные» = ближайшие пятница → воскресенье (2 ночи); прошедшая дата → тот же день в следующем году.
 """
+
 from __future__ import annotations
 
 import re
@@ -47,10 +48,23 @@ def parse_dates(text: str, today: date) -> tuple[date | None, date | None, str |
         return _future(date(today.year, _month(m.group(2)), int(m.group(1))), today), None, None
     if "выходн" in low:
         fri, sun = next_weekend(today)
-        return fri, sun, f"«На выходные» понял как {fri:%d.%m} (пт) — {sun:%d.%m} (вс), 2 ночи."
+        return fri, sun, "«На выходные» понял как пятница — воскресенье, 2 ночи."
     return None, None, None
 
 
 def month_from_text(text: str) -> int | None:
     m = re.search(r"\bв\s+" + _MONTH_RE, text.lower())
     return _month(m.group(1)) if m else None
+
+
+_NUM = {"один": 1, "день": 1, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "неделю": 7}
+
+
+def parse_shift(text: str) -> int | None:
+    """«на два дня позже» → +2, «на день раньше» → −1, «на неделю позже» → +7; иначе None."""
+    m = re.search(r"на\s+(\d+|один|день|два|две|три|четыре|пять|неделю)\s*(?:дн[а-я]*|день|сутки|недел[а-я]*)?\s*"
+                  r"(позже|раньше)", text.lower())
+    if not m:
+        return None
+    n = int(m.group(1)) if m.group(1).isdigit() else _NUM[m.group(1)]
+    return n if m.group(2) == "позже" else -n
