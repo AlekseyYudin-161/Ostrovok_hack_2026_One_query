@@ -13,6 +13,7 @@
 Структурированный вывод: сначала response_format=json_schema (strict), если провайдер/модель
 не поддерживает — откат на json_object; результат всегда валидируется Pydantic с одним повтором.
 """
+
 from __future__ import annotations
 
 import json
