@@ -1,4 +1,5 @@
 """L8: сборка поездки на каталоге ML (synth/). Без папки synth/ тесты пропускаются."""
+
 from datetime import date, timedelta
 
 import pytest
@@ -87,3 +88,11 @@ async def test_graph_trip_buy_and_replan(planner: TripPlanner) -> None:
     bought = await agent.run("да", "s-trip")
     assert bought.answer.mode.value == "purchased" and "поездка" in bought.answer.text
     assert bought.answer.itineraries[0].total_price == shifted.answer.itineraries[0].total_price
+
+
+@pytest.mark.asyncio
+async def test_kids_and_pets_notes_match_catalog(planner: TripPlanner) -> None:
+    run = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run(
+        "Сириус с ребёнком 7 лет и собакой на неделю", "s-kids")
+    assert "только отели, где можно с детьми" in run.answer.text and "можно с животными" in run.answer.text
+    assert "не поддерживается" not in run.answer.text
