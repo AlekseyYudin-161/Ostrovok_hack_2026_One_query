@@ -52,6 +52,17 @@ def parse_dates(text: str, today: date) -> tuple[date | None, date | None, str |
     return None, None, None
 
 
+_DATE_HINT = re.compile(
+    r"\d{1,2}\s*[./]\s*\d{1,2}|\bс\s+\d{1,2}\s+по\s+\d{1,2}\b|" + _MONTH_RE
+    + r"|выходн|праздник|завтра|сегодня|через\s+(?:\d+|пару|два|две|три|недел|месяц|день)"
+    r"|следующ\w*\s+недел|эт\w*\s+недел|нов\w*\s+год|понедельник|вторник|в\s+сред[уа]|четверг|пятниц|суббот|воскресень")
+
+
+def has_date_hint(text: str) -> bool:
+    """В тексте есть хоть какое-то указание на время поездки. «На неделю» — это длительность, не дата."""
+    return bool(_DATE_HINT.search(text.lower()))
+
+
 def month_from_text(text: str) -> int | None:
     m = re.search(r"\bв\s+" + _MONTH_RE, text.lower())
     return _month(m.group(1)) if m else None
