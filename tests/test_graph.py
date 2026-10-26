@@ -287,3 +287,31 @@ async def test_patch_via_api(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "replan" in [e["type"] for e in events]
     assert events[-1]["payload"]["request"]["destination"] == "Хоста"
     assert bad.status_code == 422                                          # ни text, ни patch
+
+
+def test_date_hint() -> None:
+    from harness.dates import has_date_hint
+    for t in ("с 1 ноября", "на выходные", "2-5 ноября", "в декабре", "02.11", "завтра", "в пятницу",
+              "на следующей неделе", "на новый год", "через две недели"):
+        assert has_date_hint(t), t
+    for t in ("Адлер на неделю до 50 тыс", "Хоста, двое взрослых", "Сириус с детьми 5 лет", "в среднем до 40 тыс"):
+        assert not has_date_hint(t), t
+
+
+@pytest.mark.asyncio
+async def test_llm_invented_dates_dropped() -> None:
+    """Модель вернула даты и «бюджетно», которых в тексте нет, — не берём, а просим дату заезда."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_completion(json.dumps(
+            {"area": "Адлер", "other_destination": None, "wishes": ["бюджетно"], "budget_total": 50000,
+             "checkin": "2026-10-30", "checkout": "2026-11-06", "nights": 7, "adults": None, "with_kids": False,
+             "children_ages": [], "pets": False, "month": 10}, ensure_ascii=False)))
+
+    llm = OpenAICompatLLM("http://router/v1", "k", "m",
+                          http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    run = await GraphAgent(llm, today=TODAY).run("Адлер на неделю до 50 тыс", "s-nodates")
+    r = run.request
+    assert r.checkin is None and r.checkout is None and r.month is None and r.nights == 7
+    assert "бюджетно" not in r.preferences and "30.10" not in run.answer.text
+    assert "Поездка: 7 ночей" in run.answer.text and "Точных дат нет — напишите дату заезда." in run.answer.text
+    assert run.answer.text.count("7 ночей") == 1
