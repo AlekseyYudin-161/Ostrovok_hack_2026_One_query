@@ -22,6 +22,7 @@ from synth.refdata import (
     CATALOG_TO,
     COAST_COEF,
     COAST_SEASON,
+    DISPLAY_NAMES,
     FLIGHT,
     INJECTION_REVIEWS,
     LOCAL_LINES,
@@ -91,6 +92,12 @@ async def gen_areas(glm: GLM) -> list[Area]:
                         description=t["description"], vibe=t["vibe"],
                         best_for=[b for b in t["best_for"] if b in AREA_BEST_FOR], tags=t["tags"]))
     return out
+
+
+def apply_display_names(areas: list[Area]) -> None:
+    """Короткие имена районов для ответов агента — после генерации, перед экспортом."""
+    for a in areas:
+        a.name = DISPLAY_NAMES.get(a.area_id, a.name)
 
 
 async def gen_carriers(glm: GLM) -> Carriers:

@@ -384,7 +384,7 @@
  },
  {
   "area_id": "imeretinka",
-  "name": "Имеретинская низменность (Сириус)",
+  "name": "Сириус",
   "zone": "imeretinka",
   "coast_km": 103.0,
   "mountain_km": 0.0,
@@ -443,7 +443,7 @@
  },
  {
   "area_id": "krasnaya_polyana",
-  "name": "Красная Поляна (посёлок)",
+  "name": "Красная Поляна",
   "zone": "mountains",
   "coast_km": 96.0,
   "mountain_km": 40.0,
