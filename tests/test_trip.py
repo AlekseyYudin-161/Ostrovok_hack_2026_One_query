@@ -96,3 +96,27 @@ async def test_kids_and_pets_notes_match_catalog(planner: TripPlanner) -> None:
         "Сириус с ребёнком 7 лет и собакой на неделю", "s-kids")
     assert "только отели, где можно с детьми" in run.answer.text and "можно с животными" in run.answer.text
     assert "не поддерживается" not in run.answer.text
+
+
+CASES = [
+    {"destination": "Центр Сочи", "checkin": date(2026, 11, 6), "nights": 5, "guests_adults": 2, "budget_total": 60000},
+    {"destination": "Адлер", "nights": 7, "budget_total": 50000},
+    {"destination": "Сириус", "checkin": date(2026, 11, 1), "checkout": date(2026, 11, 3), "transport": ["train"]},
+    {"destination": "Красная Поляна", "checkin": date(2026, 11, 6), "nights": 3, "pets": True},
+]
+
+
+@pytest.mark.parametrize("kw", CASES)
+def test_l9_no_night_legs_and_priced_fixes(planner: TripPlanner, kw: dict) -> None:
+    from harness.trip import _night
+    plan = planner.plan(_req(**kw), TODAY)
+    assert plan.itineraries
+    for it in plan.itineraries:
+        there = it.model_copy(update={"inbound": None, "transfers": it.transfers[:1]})
+        back = it.model_copy(update={"outbound": None})
+        assert not _night(there) and not _night(back)       # в отеле не ночью, из отеля не раньше 06:00
+        fixes = [f for c in it.checks for f in c.fixes]
+        assert not any(f.startswith("запросить") for f in fixes)          # вместо «запросить» — цена из каталога
+        assert all("₽" in f or "не предоставляется" in f for f in fixes if f.startswith(("ранний", "поздний")))
+        if kw.get("pets"):
+            assert all(t.kind != "public" for t in it.transfers)       # с животным — такси

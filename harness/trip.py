@@ -32,7 +32,8 @@ log = logging.getLogger(__name__)
 
 DEFAULT_NIGHTS = 7
 HOUR_COST = 500      # «оптимально»: час в дороге ≈ 500 ₽ — двое суток в поезде не выигрывают у рейса ради экономии
-LONG_HOURS = 8       # «комфортно»: дольше — это поезд на сутки и больше
+LONG_HOURS = 8
+NIGHT_END_HOUR = 6   # прибытие в отель / выезд из отеля раньше 06:00 — только если других вариантов нет       # «комфортно»: дольше — это поезд на сутки и больше
 DEFAULT_ADULTS = 2
 DEFAULT_ORIGIN = "Москва"
 # «из Казани», «из Питера» → город вылета из справочника ML (основа слова → город)
@@ -154,36 +155,50 @@ class TripPlanner:
     def _variant(self, label: str, hotels: list[HotelOffer], outs: list[TransportOption], backs: list[TransportOption],
                  checkin: date, checkout: date, adults: int, kids: list[int], pets: bool, aid: str) -> Itinerary:
         hotel = self._pick_hotel(label, hotels)
+        hid = hotel.hotel.hotel_id
         it = Itinerary(destination_id=aid, checkin=checkin, checkout=checkout, hotel=hotel, label=label)
-        t_in = t_out = None
-        for o in sorted(outs, key=_transport_key(label, "outbound")):
-            t_in = self._transfer(label, self._point(o.to_city), hotel.hotel.hotel_id,
-                                  o.arrive + timedelta(minutes=AFTER_ARRIVAL_MIN[o.kind]), adults, kids, pets)
-            probe = Itinerary(destination_id=aid, checkin=checkin, checkout=checkout, hotel=hotel, outbound=o,
-                              transfers=[t_in] if t_in else [])
-            if not any(c.severity == "error" for c in check_connections(probe)):
-                it.outbound = o
-                break
-        for b in sorted(backs, key=_transport_key(label, "return")):
+
+        def leg_in(o: TransportOption) -> tuple[Itinerary, TransferOption | None]:
+            t = self._transfer(label, self._point(o.to_city), hid,
+                               o.arrive + timedelta(minutes=AFTER_ARRIVAL_MIN[o.kind]), adults, kids, pets)
+            return Itinerary(destination_id=aid, checkin=checkin, checkout=checkout, hotel=hotel, outbound=o,
+                             transfers=[t] if t else []), t
+
+        def leg_out(b: TransportOption) -> tuple[Itinerary, TransferOption | None]:
             leave = b.depart - timedelta(minutes=BEFORE_DEPARTURE_MIN[b.kind] + 60)
-            t_out = self._transfer(label, hotel.hotel.hotel_id, self._point(b.from_city), leave, adults, kids, pets)
-            probe = Itinerary(destination_id=aid, checkin=checkin, checkout=checkout, hotel=hotel, inbound=b,
-                              transfers=[TransferOption(option_id="-", from_place="-", to_place="-", minutes=0,
-                                                        price_total=0), t_out] if t_out else [])
-            if not any(c.severity == "error" for c in check_connections(probe)):
-                it.inbound = b
-                break
+            t = self._transfer(label, hid, self._point(b.from_city), leave, adults, kids, pets)
+            stub = TransferOption(option_id="-", from_place="-", to_place="-", minutes=0, price_total=0)
+            return Itinerary(destination_id=aid, checkin=checkin, checkout=checkout, hotel=hotel, inbound=b,
+                             transfers=[stub, t] if t else []), t
+
+        it.outbound, t_in = _choose(sorted(outs, key=_transport_key(label, "outbound")), leg_in)
+        it.inbound, t_out = _choose(sorted(backs, key=_transport_key(label, "return")), leg_out)
         # transfers[0] — в отель, [1] — из отеля (так их читает check_connections)
         it.transfers = [t for t in ([t_in] if it.outbound else []) + ([t_out] if it.inbound else []) if t]
         it.total_price = round(hotel.price_total + sum(x.price_total for x in (it.outbound, it.inbound) if x)
                                + sum(t.price_total for t in it.transfers))
-        it.checks = check_connections(it)
+        it.checks = [self._priced_fixes(c, hid) for c in check_connections(it)]
         for leg, word in ((it.outbound, "туда"), (it.inbound, "обратно")):
             if leg is None and (outs if word == "туда" else backs):
                 it.checks.append(ConnectionCheck(rule="no_transport", ok=False, severity="warning",
                                                  message=f"Дорогу {word} без проблем со стыковкой на эти даты не нашёл.",
                                                  fixes=["сдвинуть даты", "другой вид транспорта"]))
         return it
+
+    def _priced_fixes(self, c: ConnectionCheck, hotel_id: str) -> ConnectionCheck:
+        """Подсказки с ценой из каталога: «ранний заезд — 1 200 ₽» вместо «запросить ранний заезд» (L9)."""
+        h = self.cat.hotels.get(hotel_id)
+        if h is None:
+            return c
+        fees = {"запросить ранний заезд": ("ранний заезд", h.early_checkin_fee),
+                "запросить поздний выезд": ("поздний выезд", h.late_checkout_fee)}
+        fixes = []
+        for f in c.fixes:
+            if f in fees:
+                what, fee = fees[f]
+                f = f"{what} — {_rub(fee)}" if fee is not None else f"{what} в этом отеле не предоставляется"
+            fixes.append(f)
+        return c.model_copy(update={"fixes": fixes})
 
     @staticmethod
     def _pick_hotel(label: str, hotels: list[HotelOffer]) -> HotelOffer:
@@ -202,6 +217,8 @@ class TripPlanner:
         if not frm or not to:
             return None
         opts = self.cat.transfer_options(frm, to, when, adults, kids, pets)
+        if pets:                                   # с животным — без автобусов и электричек, если есть такси
+            opts = [t for t in opts if t.kind != "public"] or opts
         if not opts:
             return None
         if label == "most_comfortable":
@@ -210,6 +227,35 @@ class TripPlanner:
         if label == "balanced":
             return min(opts, key=lambda t: t.price_total + 20 * t.minutes)     # минута в пути ≈ 20 ₽
         return opts[0]                                                         # отсортированы по цене
+
+
+def _night(it: Itinerary) -> bool:
+    """Неудобно для живого человека, хоть и не ошибка: в отеле с 00:00 до 06:00 или выезд из отеля раньше 06:00."""
+    if it.outbound:
+        t = it.transfers[0].minutes if it.transfers else 0
+        ready = it.outbound.arrive + timedelta(minutes=AFTER_ARRIVAL_MIN[it.outbound.kind] + t)
+        return ready.hour < NIGHT_END_HOUR
+    if it.inbound:
+        t = it.transfers[1].minutes if len(it.transfers) > 1 else 0
+        leave = it.inbound.depart - timedelta(minutes=BEFORE_DEPARTURE_MIN[it.inbound.kind] + t)
+        return leave.hour < NIGHT_END_HOUR
+    return False
+
+
+def _choose(options: list[TransportOption], probe: Callable[[TransportOption], tuple[Itinerary, TransferOption | None]]
+            ) -> tuple[TransportOption | None, TransferOption | None]:
+    """Первый по порядку вариант без ошибки состыковки и без ночного прибытия/выезда; если таких нет —
+    первый без ошибки (ночное время тогда останется видно в предупреждениях)."""
+    fallback: tuple[TransportOption | None, TransferOption | None] = (None, None)
+    for o in options:
+        it, t = probe(o)
+        if any(c.severity == "error" for c in check_connections(it)):
+            continue
+        if not _night(it):
+            return o, t
+        if fallback[0] is None:
+            fallback = (o, t)
+    return fallback
 
 
 def _transport_key(label: str, direction: str) -> Callable[[TransportOption], tuple]:
