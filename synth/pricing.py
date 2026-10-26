@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from functools import cached_property
 from pathlib import Path
 from statistics import median
+from typing import ClassVar
 
 from harness.contracts import DestinationOption, HotelCandidate, HotelOffer, TransferOption, TransportOption
 from synth import geo
@@ -188,12 +189,11 @@ class Catalog:
                           free_cancel_until=q["free_cancel_until"], price_total=q["total"],
                           checkin_time=h.check_in_time, checkout_time=h.check_out_time)
 
-    def search_hotels(self, checkin: date, checkout: date, adults: int = 2, children_ages: list[int] | None = None,
+    def search_quotes(self, checkin: date, checkout: date, adults: int = 2, children_ages: list[int] | None = None,
                       pets: bool = False, area_ids: list[str] | None = None, max_total: float | None = None,
                       meal: str | None = None, refundable: bool | None = None, min_stars: int | None = None,
-                      amenities: list[str] | None = None, limit: int = 20) -> list[HotelOffer]:
-        """Лучший (самый дешёвый подходящий) тариф каждого отеля."""
-        call_id = uuid.uuid4().hex[:8]
+                      amenities: list[str] | None = None, limit: int = 20) -> list[dict]:
+        """Лучший (самый дешёвый подходящий) тариф каждого отеля, с разбивкой цены — по возрастанию цены."""
         out = []
         for h in self.hotels.values():
             if area_ids and h.area_id not in area_ids:
@@ -207,8 +207,64 @@ class Catalog:
                   and (refundable is None or (q["free_cancel_until"] is not None) == refundable)
                   and (max_total is None or q["total"] <= max_total)]
             if qs:
-                out.append(self.to_offer(qs[0], call_id))
-        return sorted(out, key=lambda o: o.price_total)[:limit]
+                out.append(qs[0])
+        return sorted(out, key=lambda q: q["total"])[:limit]
+
+    def search_hotels(self, checkin: date, checkout: date, adults: int = 2, children_ages: list[int] | None = None,
+                      pets: bool = False, area_ids: list[str] | None = None, max_total: float | None = None,
+                      meal: str | None = None, refundable: bool | None = None, min_stars: int | None = None,
+                      amenities: list[str] | None = None, limit: int = 20) -> list[HotelOffer]:
+        """То же, что search_quotes, но в модели контракта HotelOffer."""
+        call_id = uuid.uuid4().hex[:8]
+        return [self.to_offer(q, call_id) for q in self.search_quotes(
+            checkin, checkout, adults, children_ages, pets, area_ids, max_total, meal, refundable, min_stars,
+            amenities, limit)]
+
+    # ------------------------------------------------------------ распознавание названий
+    def resolve_area(self, text: str) -> str | None:
+        """area_id по id, названию или синониму («Сириус», «в Адлере», «Роза Хутор»)."""
+        low = text.strip().lower()
+        if low in self.areas:
+            return low
+        for a in self.areas.values():
+            if low == a.name.lower() or any(al in low for al in a.aliases):
+                return a.area_id
+        return None
+
+    CITY_ALIASES: ClassVar[dict[str, list[str]]] = {
+        "Москва": ["москв", "мск", "moscow"], "Санкт-Петербург": ["петербург", "питер", "спб", "петерб"],
+        "Екатеринбург": ["екатеринбург", "екб"], "Нижний Новгород": ["нижн", "новгород"],
+        "Ростов-на-Дону": ["ростов"], "Новосибирск": ["новосиб"],
+    }
+
+    def resolve_city(self, text: str) -> str | None:
+        """Город вылета по названию в любом падеже («из Москвы», «Питер», «СПб»)."""
+        low = text.strip().lower()
+        for city in self.origins:
+            if low == city.lower() or low.startswith(city.lower()[:-1]) or any(
+                    al in low for al in self.CITY_ALIASES.get(city, [])):
+                return city
+        return None
+
+    def resolve_place(self, text: str) -> str | None:
+        """point_id / hotel_id / area_id по id или названию («аэропорт», «вокзал Адлер», «Сириус»)."""
+        low = text.strip().lower()
+        if text in self.points or text in self.hotels or low in self.areas:
+            return text if text in self.points or text in self.hotels else low
+        if "аэропорт" in low or "airport" in low:
+            return "aer"
+        for p in self.points.values():
+            if p.type != "airport" and p.name.lower().split(" ", 1)[-1] in low:
+                return p.point_id
+        if any(w in low for w in ("вокзал", "станци", "жд", "ж/д")):
+            area = self.resolve_area(low)
+            hit = [p for p in self.points.values() if p.area_id == area and p.type != "airport"]
+            return hit[0].point_id if hit else None
+        exact = next((h.hotel_id for h in self.hotels.values() if low == h.name.lower()), None)
+        area = self.resolve_area(low)
+        if exact or area:
+            return exact or area
+        return next((h.hotel_id for h in self.hotels.values() if len(low) >= 4 and low in h.name.lower()), None)
 
     # ------------------------------------------------------------ транспорт
     def _tz(self, city: str) -> timezone:
