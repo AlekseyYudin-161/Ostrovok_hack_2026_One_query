@@ -36,7 +36,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
-from harness.areas import WISHES, Area, find_area, find_by_name, load_areas, suggest_area
+from harness.areas import WISHES, Area, find_area, find_by_name, load_areas, name_stem, suggest_area
 from harness.contracts import (
     AgentAnswer,
     AgentEvent,
@@ -303,6 +303,13 @@ def _finish(old: TripRequest, data: dict, notes: list[str | None]) -> tuple[Trip
     return new, describe_changes(old, new)
 
 
+def area_mentioned(name: str, text: str) -> bool:
+    """В тексте есть название района (с падежом) или его синоним из справочника."""
+    area = next((a for a in AREA_LIST if a.name == name), None)
+    low = text.lower()
+    return area is not None and (name_stem(area) in low or any(al in low for al in area.aliases))
+
+
 def pick_area(req: TripRequest) -> TripRequest:
     """«Хочу в Сочи на море»: район не назван, но есть Сочи или пожелания — подбираем район сами и говорим об этом.
     Трек «О!дин запрос»: лишний вопрос хуже явного допущения, которое легко поправить."""
@@ -315,7 +322,7 @@ def pick_area(req: TripRequest) -> TripRequest:
     why = ", ".join(w for w in area.best_for if w in wishes) or ", ".join(area.best_for[:2])
     req.destination, req.missing_fields = area.name, []
     req.assumptions = [*req.assumptions, Assumption(field="destination", value=area.name, reason=(
-        f"Район не назвали — подобрал {area.name} ({why}). Напишите другой район, если хотите."))]
+        f"Район не назвали — подобрал район «{area.name}» ({why}). Напишите другой, если хотите."))]
     return req
 
 
@@ -418,6 +425,9 @@ class GraphAgent:
         text = state["text"]
         u = await understand_text(self.llm, text, self.today)
         log.info("understand: %s", u.model_dump())
+        if u.area and not area_mentioned(u.area, text):          # район модель додумала — подберём сами и скажем
+            log.info("район %r от LLM без опоры в тексте отброшен", u.area)
+            u = u.model_copy(update={"area": None})
         fresh = to_trip_request(text, u, self.today)
         # пересборка, а не поиск с нуля: и после варианта, и после уточнения («а в Хосте?» сохраняет даты и гостей)
         if prev and not u.other_destination and not FRESH_RE.search(text.lower()):
@@ -490,6 +500,13 @@ class GraphAgent:
             req.month = req.month or plan.checkin.month
         req.assumptions = [a for a in req.assumptions if a.field != "dates"] + [
             Assumption(field="note", value=n, reason=n) for n in plan.notes]
+        for a in req.assumptions:                   # каталог ML фильтрует по детям и животным — говорим как есть
+            if a.field == "children":
+                ages = f" ({', '.join(map(str, req.children_ages))} лет)" if req.children_ages else ""
+                a.reason = f"Учёл: едете с ребёнком{ages} — показываю только отели, где можно с детьми."
+            elif a.field == "pets":
+                a.reason = ("Учёл: едете с животным — показываю только отели, где можно с животными; "
+                            "доплата за животное уже в цене проживания.")
         log.info("trip: %d отелей, %d вариантов поездки", len(plan.hotels), len(plan.itineraries))
         return {"request": req.model_dump(mode="json"),
                 "hotels": [h.hotel.model_dump(mode="json") for h in plan.hotels],

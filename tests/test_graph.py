@@ -1,4 +1,5 @@
 """Бейзлайн-граф (шаги 1–3): офлайн на правилах, путь через LLM по схеме, пауза перед покупкой."""
+
 import json
 from datetime import date
 
@@ -342,3 +343,18 @@ async def test_answer_to_clarify_keeps_dates() -> None:
     r = run.request
     assert r.destination == "Хоста" and str(r.checkin) == "2026-11-06" and r.nights == 5 and r.guests_adults == 2
     assert run.answer.changes == []
+
+
+@pytest.mark.asyncio
+async def test_llm_area_without_text_support_dropped() -> None:
+    """Модель выбрала «Адлер», хотя в тексте только «Сочи», — район подбираем сами и пишем об этом."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_completion(json.dumps(
+            {"area": "Адлер", "other_destination": None, "wishes": ["море"], "budget_total": 60000,
+             "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
+             "children_ages": [], "pets": False, "month": 11}, ensure_ascii=False)))
+
+    llm = OpenAICompatLLM("http://router/v1", "k", "m",
+                          http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    run = await GraphAgent(llm, today=TODAY).run("Хочу в Сочи на море с 6 ноября на 5 ночей, вдвоём", "s-guess")
+    assert run.request.destination == "Сочи-центр" and "Район не назвали — подобрал район «Сочи-центр»" in run.answer.text
