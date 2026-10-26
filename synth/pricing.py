@@ -161,6 +161,8 @@ class Catalog:
                     "breakdown": {"accommodation": round(accommodation), "meal": round(meal), "pet_fee": pet,
                                   "extra_bed": extra, "tourist_tax": round(tax)},
                     "total": total, "free_cancel_until": self._free_cancel(rp, checkin),
+                    # не входят в total — платные опции; None — отель их не предоставляет
+                    "early_checkin_fee": h.early_checkin_fee, "late_checkout_fee": h.late_checkout_fee,
                 })
         return sorted(out, key=lambda x: x["total"])
 

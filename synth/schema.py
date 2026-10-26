@@ -41,6 +41,7 @@ class Area(BaseModel):
     mountain_km: float = 0.0              # горная ветка от Адлера
     price_level: Literal["low", "medium", "high", "premium"]
     vacation_types: list[str]
+    aliases: list[str] = []               # синонимы в нижнем регистре для поиска подстрокой в запросе
     season_calendar: dict[int, Season]    # месяц -> сезон
     season_coefficients: dict[Season, float]
     description: str = ""

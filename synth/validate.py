@@ -149,8 +149,35 @@ def determinism(cat: Catalog) -> list[str]:
     return bad
 
 
+ALIAS_CASES = {
+    "Хочу в Сириус с детьми в ноябре": "imeretinka", "отель рядом с Олимпийским парком": "imeretinka",
+    "в Сириусе на неделю": "imeretinka", "что-нибудь у Сочи Парка": "imeretinka",
+    "на Розе Хутор кататься": "rosa_khutor", "в Красной Поляне домик": "krasnaya_polyana",
+    "Горки Город на выходные": "krasnaya_polyana", "в Адлере у моря": "adler", "в Хосте тихо": "khosta",
+    "Кудепста недорого": "khosta", "Мацеста санаторий": "matsesta", "в Лазаревском дёшево": "lazarevskoe",
+    "в Лоо на море": "loo", "Дагомыс": "dagomys", "в центре Сочи у Морпорта": "sochi_center",
+    "рядом с Дендрарием": "sochi_center",
+    "хочу в Сочи к морю": None, "наше путешествие на море": None, "в горы на лыжах": None,
+}
+
+
+def aliases(cat: Catalog) -> list[str]:
+    """Синонимы районов ищутся подстрокой в text.lower() (как в harness/areas.py), первый район побеждает."""
+    bad = []
+    for a in cat.areas.values():
+        if not a.aliases or any(al != al.lower() for al in a.aliases):
+            bad.append(f"{a.area_id}: нет синонимов или не в нижнем регистре")
+    for text, expected in ALIAS_CASES.items():
+        low = text.lower()
+        got = next((a.area_id for a in cat.areas.values() if any(al in low for al in a.aliases)), None)
+        if got != expected:
+            bad.append(f"«{text}» → {got}, ожидали {expected}")
+    return bad
+
+
 def run_all(cat: Catalog) -> dict[str, list[str]]:
     it, info = example_itinerary(cat)
     errs = [c.message for c in (it.checks if it else []) if c.severity == "error"]
     return {"consistency": consistency(cat), "coverage": coverage(cat), "determinism": determinism(cat),
+            "aliases": aliases(cat),
             "example_itinerary": (["не собралась: " + str(info)] if it is None else errs)}

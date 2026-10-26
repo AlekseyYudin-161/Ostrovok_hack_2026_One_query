@@ -16,6 +16,7 @@ from datetime import date
 from synth import geo
 from synth.llm import GLM
 from synth.refdata import (
+    AREA_ALIASES,
     AREAS,
     CATALOG_FROM,
     CATALOG_TO,
@@ -85,7 +86,7 @@ async def gen_areas(glm: GLM) -> list[Area]:
         t = texts[a["area_id"]]
         mountain = a["zone"] == "mountains"
         out.append(Area(**{k: v for k, v in a.items() if k != "n_hotels"},
-                        season_calendar=MOUNTAIN_SEASON if mountain else COAST_SEASON,
+                        aliases=AREA_ALIASES[a["area_id"]], season_calendar=MOUNTAIN_SEASON if mountain else COAST_SEASON,
                         season_coefficients=MOUNTAIN_COEF if mountain else COAST_COEF,
                         description=t["description"], vibe=t["vibe"],
                         best_for=[b for b in t["best_for"] if b in AREA_BEST_FOR], tags=t["tags"]))
