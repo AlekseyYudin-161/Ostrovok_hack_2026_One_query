@@ -1,0 +1,90 @@
+{
+ "seed": 42,
+ "hotel_availability_probability": 0.97,
+ "occupancy_coefficient_range": [
+  0.9,
+  1.25
+ ],
+ "weekend_nights": [
+  5,
+  6
+ ],
+ "weekend_coefficient": 1.12,
+ "holidays": [
+  [
+   "2026-11-03",
+   "2026-11-04",
+   1.1
+  ],
+  [
+   "2026-12-30",
+   "2027-01-08",
+   1.5
+  ],
+  [
+   "2027-02-21",
+   "2027-02-23",
+   1.15
+  ],
+  [
+   "2027-03-06",
+   "2027-03-08",
+   1.15
+  ],
+  [
+   "2027-05-01",
+   "2027-05-11",
+   1.25
+  ],
+  [
+   "2027-06-11",
+   "2027-06-14",
+   1.15
+  ]
+ ],
+ "tourist_tax_rate": 0.02,
+ "child_discount": {
+  "flight": 0.75,
+  "train": 0.6,
+  "infant_flight": 0.1
+ },
+ "meal_price_per_person_night": {
+  "none": 0,
+  "breakfast": 900,
+  "half_board": 2200,
+  "full_board": 3400,
+  "all_inclusive": 5200
+ },
+ "meal_child_coefficient": 0.5,
+ "cancellation_coefficient": {
+  "non_refundable": 0.88,
+  "free_until_1d": 1.0,
+  "free_until_3d": 1.0,
+  "free_until_7d": 0.96,
+  "free_until_14d": 0.94
+ },
+ "transport_season_coefficient": {
+  "low": 0.85,
+  "regular": 1.0,
+  "high": 1.45
+ },
+ "transport_jitter": [
+  0.85,
+  1.35
+ ],
+ "transport_seats_probability": 0.92,
+ "extra_bed_child_fee": 1200,
+ "road_speed_kmh": {
+  "coast": 40,
+  "mountain": 55,
+  "in_area": 25
+ },
+ "road_overhead_min": 8,
+ "public_wait_min": 15,
+ "buffers_minutes": {
+  "after_flight": 45,
+  "after_train": 15,
+  "before_flight": 120,
+  "before_train": 30
+ }
+}
