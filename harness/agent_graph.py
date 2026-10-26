@@ -12,7 +12,9 @@
 Пересборка: в той же сессии «а если на 2 дня позже / дешевле / с нами собака / а в Хосте?» меняет только названное,
        остальное сохраняется; «было → стало» — в ответе (changes). Правка из панели — `patch` (контракт 1.2), без LLM.
 Районы — из данных ML (`synth/data/areas.json`), пока их нет — встроенные 5 (`harness/areas.py`).
-Пока фейковое: поиск (FakeHotelSearch по fixtures).
+Сборка поездки (L8): если в репо есть каталог ML (`synth/`) — отель + дорога туда и обратно + трансферы
+       + проверка состыковок, три варианта (`harness/trip.py`). Без каталога или при ODIN_CATALOG=fake —
+       поиск на фейках (FakeHotelSearch по fixtures), так работают старые тесты.
 
 Включение: AGENT_BACKEND=graph. Модель — по переменным LLM_* (`harness/llm.py`); при LLM_PROVIDER=fake
 разбор идёт по правилам, без сети и без денег.
@@ -42,6 +44,7 @@ from harness.contracts import (
     AgentRun,
     Assumption,
     HotelCandidate,
+    Itinerary,
     LLMClient,
     TripRequest,
 )
@@ -49,6 +52,7 @@ from harness.dates import WEEKDAYS_RU, has_date_hint, month_from_text, parse_dat
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
 from harness.llm import build_llm, structured
 from harness.security import NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
+from harness.trip import TripPlanner, build_planner, describe
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +185,8 @@ def rules_parse(text: str, today: date) -> Understood:
                       wishes=[w for w, keys in WISH_WORDS.items() if any(k in low for k in keys)],
                       budget_total=budget, checkin=checkin.isoformat() if checkin else None,
                       checkout=checkout.isoformat() if checkout else None,
-                      nights=7 if "недел" in low else None, adults=adults,
+                      nights=int(n.group(1)) if (n := re.search(r"(\d{1,2})\s*ноч", low)) else 7 if "недел" in low else None,
+                      adults=adults,
                       with_kids=bool(ages) or any(k in low for k in KID_WORDS), children_ages=ages,
                       pets=any(k in f"{low} " for k in PET_WORDS), month=month_from_text(text))
 
@@ -298,6 +303,32 @@ def _finish(old: TripRequest, data: dict, notes: list[str | None]) -> tuple[Trip
     return new, describe_changes(old, new)
 
 
+def pick_area(req: TripRequest) -> TripRequest:
+    """«Хочу в Сочи на море»: район не назван, но есть Сочи или пожелания — подбираем район сами и говорим об этом.
+    Трек «О!дин запрос»: лишний вопрос хуже явного допущения, которое легко поправить."""
+    wishes = [w for w in req.preferences if w in WISHES]
+    if not wishes and "сочи" not in req.raw_text.lower():
+        return req                                          # «куда-нибудь на выходные» — тут уточняем
+    want = set(wishes or ["море"])
+    sochi = "сочи" in req.raw_text.lower()              # сказали «Сочи» — при равенстве берём сам город
+    area = max(AREA_LIST, key=lambda a: (len(set(a.best_for) & want), sochi and "сочи" in a.name.lower()))
+    why = ", ".join(w for w in area.best_for if w in wishes) or ", ".join(area.best_for[:2])
+    req.destination, req.missing_fields = area.name, []
+    req.assumptions = [*req.assumptions, Assumption(field="destination", value=area.name, reason=(
+        f"Район не назвали — подобрал {area.name} ({why}). Напишите другой район, если хотите."))]
+    return req
+
+
+def clarify_text(areas: list[Area]) -> str:
+    """Вопрос строим из справочника районов (ML или встроенного), а не из захардкоженных названий."""
+    parts = []
+    for wish, label in (("море", "море"), ("горы/лыжи", "горы"), ("с детьми", "с детьми"), ("тихо", "тихо")):
+        names = [a.name for a in areas if wish in a.best_for][:2]
+        if names:
+            parts.append(f"{label} ({', '.join(names)})")
+    return "Куда в Большом Сочи: " + ", ".join(parts) + "? Можно назвать район или что важно в отдыхе."
+
+
 def merge_request(old: TripRequest, fresh: TripRequest, u: Understood, text: str) -> tuple[TripRequest, list[str]]:
     """Пересборка по тексту: меняем только то, что пользователь назвал; остальное сохраняем (Constraint Retention)."""
     data = old.model_dump()
@@ -354,15 +385,20 @@ class State(TypedDict, total=False):
     other_destination: str | None
     request: dict
     hotels: list[dict]
+    itineraries: list[dict]
     answer: dict
 
 
 class GraphAgent:
     """Реализует Protocol Agent (harness/contracts.py)."""
 
-    def __init__(self, llm: LLMClient | None = None, today: date | None = None) -> None:
+    def __init__(self, llm: LLMClient | None = None, today: date | None = None,
+                 planner: TripPlanner | None | Literal["auto"] = "auto") -> None:
         self.llm = llm or build_llm()
         self._today = today  # для тестов; иначе — сегодняшняя дата на момент запроса
+        if planner == "auto":
+            planner = None if os.getenv("ODIN_CATALOG", "synth") == "fake" else build_planner()
+        self.planner = planner
         self.search_tool = FakeHotelSearch()
         self.ranker = FakeRanker()
         self.graph = self._build()
@@ -377,17 +413,23 @@ class GraphAgent:
         if state.get("patch") and prev:                          # правка из панели — без LLM
             req, changes = apply_patch(prev, state["patch"])
             log.info("patch: %s → %s", state["patch"], changes)
-            return {"request": req.model_dump(mode="json"), "hotels": [], "changes": changes, "other_destination": None}
+            return {"request": req.model_dump(mode="json"), "hotels": [], "itineraries": [], "changes": changes,
+                    "other_destination": None}
         text = state["text"]
         u = await understand_text(self.llm, text, self.today)
         log.info("understand: %s", u.model_dump())
         fresh = to_trip_request(text, u, self.today)
-        if prev and prev.destination and not u.other_destination and not FRESH_RE.search(text.lower()):
-            req, changes = merge_request(prev, fresh, u, text)     # пересборка, а не поиск с нуля
+        # пересборка, а не поиск с нуля: и после варианта, и после уточнения («а в Хосте?» сохраняет даты и гостей)
+        if prev and not u.other_destination and not FRESH_RE.search(text.lower()):
+            req, changes = merge_request(prev, fresh, u, text)
+            if not prev.destination:
+                changes = []                                   # ответ на уточнение — дополнение, не пересборка
             log.info("replan: %s", changes)
         else:
             req, changes = fresh, []
-        return {"request": req.model_dump(mode="json"), "hotels": [], "changes": changes,
+        if not req.destination and not u.other_destination:
+            req = pick_area(req)
+        return {"request": req.model_dump(mode="json"), "hotels": [], "itineraries": [], "changes": changes,
                 "other_destination": None if req.destination else safe_place(u.other_destination)}
 
     @staticmethod
@@ -426,18 +468,32 @@ class GraphAgent:
         return "search" if state["request"].get("destination") else END
 
     async def _clarify(self, state: State) -> State:
-        answer = AgentAnswer(mode=AgentMode.CLARIFY,
-                             text="Что ближе: море (Адлер, Сочи-центр), горы (Красная Поляна), "
-                                  "парки для детей (Сириус) или тихо и недорого (Хоста)?",
+        answer = AgentAnswer(mode=AgentMode.CLARIFY, text=clarify_text(AREA_LIST),
                              questions=["Какой район или формат отдыха?"])
         return {"answer": answer.model_dump(mode="json")}
 
     async def _search(self, state: State) -> State:
         req = TripRequest(**state["request"])
+        if self.planner:
+            return self._plan_trip(req)
         result = await self.search_tool(HotelSearchArgs(city=FIXTURE_CITY, max_price_total=req.budget_total))
         hotels = self.ranker.rank(req, [HotelCandidate(**h) for h in result.data or []])
         log.info("search: %d отелей (бюджет %s)", len(hotels), req.budget_total)
         return {"hotels": [h.model_dump(mode="json") for h in hotels]}
+
+    def _plan_trip(self, req: TripRequest) -> State:
+        """L8: поездка целиком на каталоге ML. Додуманные даты/гости/город — в допущения, даты — в запрос."""
+        plan = self.planner.plan(req, self.today)
+        if plan.checkin and (not req.checkin or not req.checkout):
+            req.checkin, req.checkout = plan.checkin, plan.checkout
+            req.nights = (plan.checkout - plan.checkin).days
+            req.month = req.month or plan.checkin.month
+        req.assumptions = [a for a in req.assumptions if a.field != "dates"] + [
+            Assumption(field="note", value=n, reason=n) for n in plan.notes]
+        log.info("trip: %d отелей, %d вариантов поездки", len(plan.hotels), len(plan.itineraries))
+        return {"request": req.model_dump(mode="json"),
+                "hotels": [h.hotel.model_dump(mode="json") for h in plan.hotels],
+                "itineraries": [it.model_dump(mode="json") for it in plan.itineraries]}
 
     @staticmethod
     def _route_search(state: State) -> str:
@@ -456,6 +512,8 @@ class GraphAgent:
 
     async def _offer(self, state: State) -> State:
         """План + вопрос «оформить?». Сам вопрос задаёт следующий узел через interrupt."""
+        if state.get("itineraries"):
+            return self._offer_trip(state)
         req = TripRequest(**state["request"])
         hotels = [HotelCandidate(**h) for h in state["hotels"]]
         best = hotels[0]
@@ -471,6 +529,28 @@ class GraphAgent:
         answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, text="\n".join(lines), candidates=hotels[:3],
                              changes=state.get("changes", []),
                              assumptions=req.assumptions, pending_action=pending)
+        return {"answer": answer.model_dump(mode="json")}
+
+    def _offer_trip(self, state: State) -> State:
+        """L8: три варианта поездки целиком; оформить предлагаем первый («Оптимально»)."""
+        req = TripRequest(**state["request"])
+        its = [Itinerary(**it) for it in state["itineraries"]]
+        n = len(its)
+        lines = [f"{req.destination}: собрал {n} {plural(n, 'вариант', 'варианта', 'вариантов')} поездки (демо-данные)."]
+        lines += [x for x in [trip_summary(req)] if x]
+        if state.get("changes"):
+            lines.append("Изменил: " + "; ".join(state["changes"]) + ".")
+        lines += [a.reason for a in req.assumptions]
+        for i, it in enumerate(its, 1):
+            lines += describe(it, i)
+        best = its[0]
+        lines.append(f"Оформить вариант 1 «{best.hotel.hotel.name}» и дорогу за {rub(best.total_price)}? "
+                     "Ответьте «да» или «нет» (демо-оплата).")
+        pending = {"tool": "purchase_mock", "label": best.label, "hotel_id": best.hotel.hotel.hotel_id,
+                   "price_total": best.total_price, "source_call_id": best.hotel.hotel.source_call_id}
+        answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, text="\n".join(lines),
+                             candidates=[it.hotel.hotel for it in its], itineraries=its,
+                             changes=state.get("changes", []), assumptions=req.assumptions, pending_action=pending)
         return {"answer": answer.model_dump(mode="json")}
 
     async def _confirm(self, state: State) -> State:
@@ -491,8 +571,23 @@ class GraphAgent:
     async def _purchase(self, state: State) -> State:
         """Демо-оплата: сверяем то, что подтвердил пользователь, с тем, что предлагали (никаких новых цен)."""
         pending = state["answer"]["pending_action"]
-        offered = {h["hotel_id"]: h for h in state["hotels"]}
-        hotel = offered.get(pending["hotel_id"])
+        if state.get("itineraries"):                     # L8: сверяем с собранной поездкой, а не с отелем
+            trip = next((it for it in state["itineraries"] if it["label"] == pending.get("label")), None)
+            ok = trip is not None and trip["hotel"]["hotel"]["hotel_id"] == pending["hotel_id"] \
+                and trip["total_price"] == pending["price_total"]
+            if ok:
+                ref = "DEMO-" + uuid.uuid4().hex[:8].upper()
+                answer = AgentAnswer(mode=AgentMode.PURCHASED, candidates=[HotelCandidate(**trip["hotel"]["hotel"])],
+                                     itineraries=[Itinerary(**trip)], plan={"booking_ref": ref},
+                                     text=f"Готово (демо): поездка с «{trip['hotel']['hotel']['name']}», дорогой и "
+                                          f"трансферами за {rub(trip['total_price'])}. Номер брони {ref}. "
+                                          "Реальной оплаты не было.")
+                log.info("purchase: %s поездка %s %s", ref, trip["label"], pending["hotel_id"])
+                return {"answer": answer.model_dump(mode="json")}
+            hotel = None
+        else:
+            offered = {h["hotel_id"]: h for h in state["hotels"]}
+            hotel = offered.get(pending["hotel_id"])
         if hotel is None or hotel["price_total"] != pending["price_total"]:
             answer = AgentAnswer(mode=AgentMode.NO_SOLUTION, text="Предложение изменилось — давайте подберу заново.",
                                  violations=["pending_action не совпал с выдачей"])
@@ -590,7 +685,8 @@ class GraphAgent:
                 if out.get("changes"):
                     yield ev("replan", node, changes=out["changes"], request=request)
                 if out.get("hotels"):
-                    yield ev("tool_result", node, tool=self.search_tool.name, ok=True, n=len(out["hotels"]))
+                    yield ev("tool_result", node, tool="synth_catalog" if self.planner else self.search_tool.name,
+                             ok=True, n=len(out["hotels"]), itineraries=len(out.get("itineraries") or []))
                 if "answer" in out:
                     mode = out["answer"]["mode"]
                     if mode == AgentMode.CLARIFY.value:
