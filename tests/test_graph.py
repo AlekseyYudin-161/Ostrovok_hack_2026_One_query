@@ -1,5 +1,4 @@
 """Бейзлайн-граф (шаги 1–3): офлайн на правилах, путь через LLM по схеме, пауза перед покупкой."""
-
 import json
 from datetime import date
 
@@ -315,3 +314,31 @@ async def test_llm_invented_dates_dropped() -> None:
     assert "бюджетно" not in r.preferences and "30.10" not in run.answer.text
     assert "Поездка: 7 ночей" in run.answer.text and "Точных дат нет — напишите дату заезда." in run.answer.text
     assert run.answer.text.count("7 ночей") == 1
+
+
+@pytest.mark.asyncio
+async def test_sochi_without_area_picks_one() -> None:
+    """«Хочу в Сочи на море»: модель не дала район — подбираем по пожеланиям и говорим об этом, без лишнего вопроса."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_completion(json.dumps(
+            {"area": None, "other_destination": None, "wishes": ["море"], "budget_total": 60000,
+             "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
+             "children_ages": [], "pets": False, "month": 11}, ensure_ascii=False)))
+
+    llm = OpenAICompatLLM("http://router/v1", "k", "m",
+                          http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    run = await GraphAgent(llm, today=TODAY).run("Хочу в Сочи на море с 6 ноября на 5 ночей, вдвоём, до 60 тыс", "s-sochi")
+    expected = suggest_area(load_areas("builtin"), ["море"]).name
+    assert run.request.destination == expected and str(run.request.checkin) == "2026-11-06" and run.request.nights == 5
+    assert "Район не назвали — подобрал" in run.answer.text
+
+
+@pytest.mark.asyncio
+async def test_answer_to_clarify_keeps_dates() -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY)
+    first = await agent.run("Хочу куда-нибудь с 6 ноября на 5 ночей, вдвоём", "s-fill")
+    assert first.answer.mode.value == "clarify" and "Большом Сочи" in first.answer.text
+    run = await agent.run("а если в Хосте?", "s-fill")
+    r = run.request
+    assert r.destination == "Хоста" and str(r.checkin) == "2026-11-06" and r.nights == 5 and r.guests_adults == 2
+    assert run.answer.changes == []

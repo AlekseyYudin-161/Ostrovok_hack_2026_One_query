@@ -2,3 +2,4 @@
 import os
 
 os.environ.setdefault("ODIN_AREAS_FILE", "builtin")
+os.environ.setdefault("ODIN_CATALOG", "fake")   # старые тесты — на фейковом поиске; сборку поездки проверяет test_trip.py
