@@ -38,13 +38,11 @@ AGENT_BACKEND=http API_URL=http://localhost:8000 uv run streamlit run ui/app.py
 | Облако (kodikrouter; запасной routerai / любой OpenAI-совместимый) | `LLM_PROVIDER=openai_compat`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL=qwen/qwen3.6-35b-a3b`, `LLM_EXTRA_BODY={"reasoning": {"enabled": false}}` | разработка и демо |
 | Локально (Ollama) | `ollama pull <модель>`, затем `LLM_BASE_URL=http://localhost:11434/v1`, `LLM_API_KEY=ollama`, `LLM_MODEL=<модель>` | без внешних сервисов |
 
-Данные: цены, тарифы и отзывы — **демо-данные** (сгенерированы); названия и координаты отелей — © OpenStreetMap contributors (ODbL); расписания — Яндекс Расписания.
+Данные: **все данные — демо** (синтетический каталог `synth/`: отели, тарифы, расписания, трансферы и отзывы вымышленные; районы Большого Сочи и климатические нормы — условно реальные).
 
-## Структура и владельцы
-См. `.github/CODEOWNERS` и документ «Роли, модули и контракт данных» (§6).
 
 ## Правила
-- Ветки `<роль>/<задача>` от `dev`; в `dev` — только через PR, ревьюит и мержит тимлид.
+- Ветки `feature/<задача>` от `dev`; в `dev` — только через PR, ревьюит и мержит тимлид.
 - `main` — стабильная версия для сабмита: тимлид вливает `dev → main` на вехах и перед сдачей.
 - Модули зависят только от `contracts.py`, `constraints.py`, `fakes.py`.
 - Новая зависимость — строкой в описании PR; `uv.lock` обновляет тимлид.

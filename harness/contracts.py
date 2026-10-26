@@ -2,6 +2,7 @@
 
 Изменения — только PR с меткой `contract` и новой CONTRACT_VERSION (см. docs, документ 03 §3).
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -11,7 +12,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
-CONTRACT_VERSION = "1.1.0"   # 1.1 (24.10): одна локация — районы, электрички; 1.0: модели поездки; 0.2: trace_id
+CONTRACT_VERSION = "1.2.0"   # 1.2 (25.10): Agent.stream/run(..., patch) — правка параметров из панели; 1.1 (24.10): одна локация — районы, электрички; 1.0: модели поездки; 0.2: trace_id
 
 
 # ---------- Запрос и разбор ----------
@@ -343,5 +344,7 @@ class MemoryStore(Protocol):                  # владелец: M2 (ML)
 
 @runtime_checkable
 class Agent(Protocol):                        # владелец: M1 (тимлид)
-    def stream(self, text: str, session_id: str) -> AsyncIterator[AgentEvent]: ...
-    async def run(self, text: str, session_id: str) -> AgentRun: ...
+    # patch — изменённые поля из панели параметров (ADR-022): destination, checkin, checkout, nights,
+    # guests_adults, children_ages, pets, budget_total. Агент применяет их к текущему запросу без нового разбора.
+    def stream(self, text: str, session_id: str, patch: dict | None = None) -> AsyncIterator[AgentEvent]: ...
+    async def run(self, text: str, session_id: str, patch: dict | None = None) -> AgentRun: ...

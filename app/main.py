@@ -10,9 +10,9 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
 from fastapi.responses import RedirectResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from harness.contracts import CONTRACT_VERSION, Agent, HotelCandidate
 from harness.fakes import FakeAgent, FakeHotelSearch, HotelSearchArgs
@@ -46,8 +46,15 @@ app = FastAPI(title="О!дин запрос", lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(default="", max_length=2000)
     session_id: str = Field(min_length=1, max_length=64)
+    patch: dict | None = None  # правка полей из панели параметров (ADR-022), контракт 1.2
+
+    @model_validator(mode="after")
+    def text_or_patch(self) -> ChatRequest:
+        if not self.text.strip() and not self.patch:
+            raise ValueError("нужен text или patch")
+        return self
 
 
 @app.get("/", include_in_schema=False)
@@ -74,13 +81,11 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
     async def sse() -> AsyncIterator[str]:
         try:
-            async for event in agent.stream(req.text, req.session_id):
+            async for event in agent.stream(req.text, req.session_id, patch=req.patch):
                 yield f"event: {event.type}\ndata: {event.model_dump_json()}\n\n"
         except Exception:  # клиенту — событие error, в лог — трейс
             log.exception("agent failed session=%s", req.session_id)
             yield 'event: error\ndata: {"message": "internal error"}\n\n'
 
-    if not req.text.strip():
-        raise HTTPException(422, "empty text")
     return StreamingResponse(sse(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})
