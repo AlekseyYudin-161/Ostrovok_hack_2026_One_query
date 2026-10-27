@@ -4,6 +4,7 @@
                   → out_of_scope → suggest_confirm (interrupt) → search | END      (вне Сочи, ADR-019)
                   → search → offer → confirm (interrupt) → purchase
                            └→ no_solution
+       START → addon → confirm (interrupt) → purchase          (после брони: ранний заезд / поздний выезд, L14)
 Шаг 1: разбор запроса LLM по JSON-схеме (`structured()`), уточнение, поиск, ответ.
 Шаг 2: пауза перед покупкой (interrupt) и ответ «да/нет» тем же `/chat` с тем же session_id;
        демо-оплата; дети и животные распознаются и показываются как допущения, пока поиск их не фильтрует.
@@ -51,7 +52,7 @@ from harness.contracts import (
 )
 from harness.dates import WEEKDAYS_RU, has_date_hint, month_from_text, parse_dates, parse_shift
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
-from harness.llm import build_llm, structured
+from harness.llm import build_llm, start_usage, structured
 from harness.security import NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
 from harness.trip import TripPlanner, build_planner, describe
 
@@ -76,6 +77,11 @@ WISH_WORDS = {"море": ("мор", "пляж"), "горы/лыжи": ("гор"
               "тихо": ("тих", "спокойн"), "бюджетно": ("недорог", "бюджетн", "дешев", "эконом"), "тусовка": ("тусов", "клуб"),
               "оздоровление": ("оздоров", "санатор", "спа"), "экскурсии": ("экскурс", "достопр"),
               "активный отдых": ("актив", "поход"), "романтика": ("романт", "медов"), "люкс": ("люкс", "роскош")}
+# L14: доп. услуги к уже оформленной брони
+ADDONS = {"early_checkin": ("ранний заезд", re.compile(
+              r"ранн\w*\s+(?:за)?(?:езд|сел)|(?:заех|засел)\w*\s+(?:по)?раньше|early\s+check[\s-]?in", re.IGNORECASE)),
+          "late_checkout": ("поздний выезд", re.compile(
+              r"поздн\w*\s+(?:вы)?(?:езд|сел)|(?:выех|высел)\w*\s+(?:по)?позже|late\s+check[\s-]?out", re.IGNORECASE))}
 
 class Understood(BaseModel):
     """Что LLM обязана вернуть из текста пользователя. Только факты из текста, без догадок."""
@@ -115,6 +121,24 @@ def system_prompt(today: date) -> str:
 
 
 # ---------- утилиты текста ----------
+def addon_kind(text: str) -> str | None:
+    """«можно ранний заезд?» → early_checkin, «выехать попозже» → late_checkout."""
+    return next((kind for kind, (_, rx) in ADDONS.items() if rx.search(text or "")), None)
+
+
+def _langfuse_client():
+    """Клиент Langfuse, если заданы ключи и трассировка не выключена; иначе None (ничего не отправляем)."""
+    if not os.getenv("LANGFUSE_PUBLIC_KEY") or os.getenv("LANGFUSE_TRACING_ENABLED", "true") == "false":
+        return None
+    try:
+        from langfuse import get_client  # импорт здесь: без ключей Langfuse не нужен
+
+        return get_client()
+    except Exception as e:  # noqa: BLE001 — трассировка не должна ломать ответ
+        log.warning("Langfuse недоступен (%s) — работаем без трассировки", e)
+        return None
+
+
 def plural(n: int, one: str, few: str, many: str) -> str:
     """plural(1,'вариант','варианта','вариантов') → 'вариант'; 3 → 'варианта'; 5, 11, 12 → 'вариантов'."""
     n = abs(n)
@@ -438,6 +462,7 @@ class State(TypedDict, total=False):
     relax: list[dict]
     destinations: list[dict]
     answer: dict
+    booking: dict        # оформленная (демо) бронь: ref, label, hotel_id, name, price_total, addons
 
 
 class GraphAgent:
@@ -629,6 +654,7 @@ class GraphAgent:
         if state.get("changes"):
             lines.append("Изменил: " + "; ".join(state["changes"]) + ".")
         lines += [a.reason for a in req.assumptions]
+        lines += self._replace_note(state)
         lines.append(f"Оформить «{best.name}» за {rub(best.price_total or 0)}? Ответьте «да» или «нет» (демо-оплата).")
         pending = {"tool": "purchase_mock", "hotel_id": best.hotel_id, "name": best.name,
                    "price_total": best.price_total, "source_call_id": best.source_call_id}
@@ -650,6 +676,7 @@ class GraphAgent:
         for i, it in enumerate(its, 1):
             lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None)
         best = its[0]
+        lines += self._replace_note(state)
         lines.append(f"Оформить вариант 1 «{best.hotel.hotel.name}» и дорогу за {rub(best.total_price)}? "
                      "Ответьте «да» или «нет»" + (", для другого варианта — «да, вариант 2»" if n > 1 else "")
                      + " (демо-оплата).")
@@ -661,13 +688,50 @@ class GraphAgent:
                              changes=state.get("changes", []), assumptions=req.assumptions, pending_action=pending)
         return {"answer": answer.model_dump(mode="json")}
 
+    @staticmethod
+    def _replace_note(state: State) -> list[str]:
+        """L14: в сессии уже есть бронь — новое оформление её заменит (говорим до «да», а не после)."""
+        booking = state.get("booking")
+        return [f"Сейчас у вас бронь {booking['ref']}; оформление заменит её."] if booking else []
+
+    @staticmethod
+    def _route_start(state: State) -> str:
+        if state.get("booking") and not state.get("patch") and addon_kind(state.get("text") or ""):
+            return "addon"
+        return "understand"
+
+    async def _addon(self, state: State) -> State:
+        """L14: ранний заезд / поздний выезд к оформленной брони — цена из каталога, оформление только после «да»."""
+        booking = state["booking"]
+        kind = addon_kind(state["text"])
+        what = ADDONS[kind][0]
+        fee, std_time = self.planner.addon(booking["hotel_id"], kind) if self.planner else (None, None)
+        early = kind == "early_checkin"
+        std = f"Стандартный {'заезд — с' if early else 'выезд — до'} {std_time}. " if std_time else ""
+        if fee is None:
+            answer = AgentAnswer(mode=AgentMode.PLAN,
+                                 text=f"{std}{what.capitalize()} в «{booking['name']}» не предоставляется. "
+                                      f"Бронь {booking['ref']} без изменений.")
+            return {"answer": answer.model_dump(mode="json")}
+        pending = {"tool": "addon_mock", "addon": kind, "booking_ref": booking["ref"], "hotel_id": booking["hotel_id"],
+                   "name": booking["name"], "price_total": fee}
+        answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, pending_action=pending,
+                             text=f"{std}{what.capitalize()} в «{booking['name']}» — {rub(fee)}. "
+                                  f"Добавить к брони {booking['ref']}? Ответьте «да» или «нет» (демо-оплата).")
+        return {"answer": answer.model_dump(mode="json")}
+
+    @staticmethod
+    def _route_addon(state: State) -> str:
+        return "confirm" if state["answer"]["mode"] == AgentMode.CONFIRM_ACTION.value else END
+
     async def _confirm(self, state: State) -> State:
         """Пауза до ответа пользователя. Покупку вызывает только код и только после явного «да» (DesignDoc §10)."""
         reply = interrupt(state["answer"]["pending_action"])
         decision = yes_no(str(reply))
         log.info("confirm: ответ %r → %s", reply, decision)
+        addon = state["answer"]["pending_action"].get("tool") == "addon_mock"
         if decision:
-            choice = parse_choice(str(reply))
+            choice = None if addon else parse_choice(str(reply))
             its = state.get("itineraries") or []
             if choice and 1 < choice <= len(its):           # «да, вариант 2» — оформляем выбранный вариант
                 it = its[choice - 1]
@@ -676,6 +740,10 @@ class GraphAgent:
                 log.info("confirm: выбран вариант %d (%s)", choice, it["label"])
                 return {"answer": {**state["answer"], "pending_action": pending}}
             return {}
+        if addon:
+            answer = AgentAnswer(mode=AgentMode.PLAN, text=f"Хорошо, не добавляю. Бронь {state['booking']['ref']} "
+                                                           "без изменений.")
+            return {"answer": answer.model_dump(mode="json")}
         answer = AgentAnswer(mode=AgentMode.PLAN, candidates=[HotelCandidate(**h) for h in state["hotels"][:3]],
                              text="Хорошо, не оформляю. Можно изменить район, бюджет или даты.")
         return {"answer": answer.model_dump(mode="json")}
@@ -687,19 +755,28 @@ class GraphAgent:
     async def _purchase(self, state: State) -> State:
         """Демо-оплата: сверяем то, что подтвердил пользователь, с тем, что предлагали (никаких новых цен)."""
         pending = state["answer"]["pending_action"]
+        if pending.get("tool") == "addon_mock":
+            return self._purchase_addon(state, pending)
+        old = state.get("booking")
         if state.get("itineraries"):                     # L8: сверяем с собранной поездкой, а не с отелем
             trip = next((it for it in state["itineraries"] if it["label"] == pending.get("label")), None)
             ok = trip is not None and trip["hotel"]["hotel"]["hotel_id"] == pending["hotel_id"] \
                 and trip["total_price"] == pending["price_total"]
             if ok:
                 ref = "DEMO-" + uuid.uuid4().hex[:8].upper()
+                name = trip["hotel"]["hotel"]["name"]
+                head = f"Бронь изменена (демо): {old['ref']} → {ref}. Теперь" if old else "Готово (демо):"
+                tail = "" if old else f" Номер брони {ref}."
                 answer = AgentAnswer(mode=AgentMode.PURCHASED, candidates=[HotelCandidate(**trip["hotel"]["hotel"])],
-                                     itineraries=[Itinerary(**trip)], plan={"booking_ref": ref},
-                                     text=f"Готово (демо): поездка с «{trip['hotel']['hotel']['name']}», дорогой и "
-                                          f"трансферами за {rub(trip['total_price'])}. Номер брони {ref}. "
-                                          "Реальной оплаты не было.")
-                log.info("purchase: %s поездка %s %s", ref, trip["label"], pending["hotel_id"])
-                return {"answer": answer.model_dump(mode="json")}
+                                     itineraries=[Itinerary(**trip)],
+                                     plan={"booking_ref": ref, **({"replaced": old["ref"]} if old else {})},
+                                     text=f"{head} поездка с «{name}», дорогой и трансферами за "
+                                          f"{rub(trip['total_price'])}.{tail} Реальной оплаты не было.")
+                log.info("purchase: %s поездка %s %s (замена %s)", ref, trip["label"], pending["hotel_id"],
+                         old and old["ref"])
+                booking = {"ref": ref, "label": trip["label"], "hotel_id": pending["hotel_id"], "name": name,
+                           "price_total": trip["total_price"], "addons": []}
+                return {"answer": answer.model_dump(mode="json"), "booking": booking}
             hotel = None
         else:
             offered = {h["hotel_id"]: h for h in state["hotels"]}
@@ -709,21 +786,42 @@ class GraphAgent:
                                  violations=["pending_action не совпал с выдачей"])
             return {"answer": answer.model_dump(mode="json")}
         ref = "DEMO-" + uuid.uuid4().hex[:8].upper()
+        head = f"Бронь изменена (демо): {old['ref']} → {ref}." if old else "Готово (демо):"
         answer = AgentAnswer(mode=AgentMode.PURCHASED, candidates=[HotelCandidate(**hotel)],
-                             text=f"Готово (демо): «{hotel['name']}» за {rub(hotel['price_total'])}. "
-                                  f"Номер брони {ref}. Реальной оплаты не было.",
-                             plan={"booking_ref": ref})
+                             text=f"{head} «{hotel['name']}» за {rub(hotel['price_total'])}. "
+                                  + ("" if old else f"Номер брони {ref}. ") + "Реальной оплаты не было.",
+                             plan={"booking_ref": ref, **({"replaced": old["ref"]} if old else {})})
         log.info("purchase: %s %s", ref, hotel["hotel_id"])
-        return {"answer": answer.model_dump(mode="json")}
+        booking = {"ref": ref, "label": None, "hotel_id": hotel["hotel_id"], "name": hotel["name"],
+                   "price_total": hotel["price_total"], "addons": []}
+        return {"answer": answer.model_dump(mode="json"), "booking": booking}
+
+    def _purchase_addon(self, state: State, pending: dict) -> State:
+        """L14: сверяем доп. услугу с бронью и ценой каталога, затем «оформляем» (демо)."""
+        booking = state.get("booking") or {}
+        fee = self.planner.addon(pending["hotel_id"], pending["addon"])[0] if self.planner else None
+        if booking.get("ref") != pending["booking_ref"] or fee is None or fee != pending["price_total"]:
+            answer = AgentAnswer(mode=AgentMode.NO_SOLUTION, text="Условия изменились — спросите ещё раз, пересчитаю.",
+                                 violations=["pending_action не совпал с бронью"])
+            return {"answer": answer.model_dump(mode="json")}
+        what = ADDONS[pending["addon"]][0]
+        addons = [*booking.get("addons", []), {"addon": pending["addon"], "price_total": fee}]
+        answer = AgentAnswer(mode=AgentMode.PURCHASED,
+                             plan={"booking_ref": booking["ref"], "addon": pending["addon"], "addon_price": fee},
+                             text=f"Готово (демо): {what} добавлен к брони {booking['ref']} за {rub(fee)}. "
+                                  "Реальной оплаты не было.")
+        log.info("purchase: %s + %s %s", booking["ref"], pending["addon"], fee)
+        return {"answer": answer.model_dump(mode="json"), "booking": {**booking, "addons": addons}}
 
     def _build(self):
         b = StateGraph(State)
         for name, fn in [("understand", self._understand), ("clarify", self._clarify), ("search", self._search),
                          ("no_solution", self._no_solution), ("offer", self._offer), ("confirm", self._confirm),
                          ("purchase", self._purchase), ("out_of_scope", self._out_of_scope),
-                         ("suggest_confirm", self._suggest_confirm)]:
+                         ("suggest_confirm", self._suggest_confirm), ("addon", self._addon)]:
             b.add_node(name, fn)
-        b.add_edge(START, "understand")
+        b.add_conditional_edges(START, self._route_start, {"understand": "understand", "addon": "addon"})
+        b.add_conditional_edges("addon", self._route_addon, {"confirm": "confirm", END: END})
         b.add_conditional_edges("understand", self._route_understand,
                                 {"search": "search", "clarify": "clarify", "out_of_scope": "out_of_scope"})
         b.add_edge("out_of_scope", "suggest_confirm")
@@ -742,6 +840,7 @@ class GraphAgent:
             from langfuse.langchain import CallbackHandler  # импорт здесь: без ключей Langfuse не нужен
 
             cfg["callbacks"] = [CallbackHandler()]
+            cfg["metadata"] = {"langfuse_session_id": session_id}   # все ходы диалога — в одной сессии Langfuse
         return cfg
 
     async def _graph_input(self, text: str, cfg: dict, patch: dict | None) -> dict | Command:
@@ -757,9 +856,37 @@ class GraphAgent:
         return {"text": text, "patch": patch}
 
     async def stream(self, text: str, session_id: str, patch: dict | None = None) -> AsyncIterator[AgentEvent]:
+        """L12: с ключами Langfuse весь ход — один трейс «chat» (guard, узлы графа, вызов модели) в сессии session_id."""
+        lf = _langfuse_client()
+        if lf is None:
+            async for event in self._stream(text, session_id, patch):
+                yield event
+            return
+        from langfuse import propagate_attributes
+
+        with lf.start_as_current_observation(name="chat", as_type="span",
+                                             input={"text": (text or "")[:2000], "patch": patch}) as root, \
+                propagate_attributes(session_id=session_id, trace_name="chat"):
+            last: AgentEvent | None = None
+            async for event in self._stream(text, session_id, patch):
+                if event.type == "answer":
+                    event.payload["trace_id"] = root.trace_id
+                    last = event
+                yield event
+            if last is not None:
+                a = last.payload["answer"]
+                root.update(output={"mode": a["mode"], "text": a["text"]},
+                            metadata={"usage": last.payload.get("usage"), "violations": a.get("violations") or [],
+                                      "node": last.node},
+                            level="WARNING" if a.get("violations") else None)
+
+    async def _stream(self, text: str, session_id: str, patch: dict | None = None) -> AsyncIterator[AgentEvent]:
         run_id = uuid.uuid4().hex[:12]
+        usage = start_usage()        # токены и ₽ этого хода (вызовы модели в узлах графа)
 
         def ev(type_: str, node: str | None = None, **payload) -> AgentEvent:
+            if type_ == "answer":
+                payload["usage"] = usage.as_dict()
             return AgentEvent(run_id=run_id, ts=datetime.now(UTC), type=type_, node=node, payload=payload)
 
         cfg = self._config(session_id)
@@ -787,9 +914,7 @@ class GraphAgent:
         resumed = isinstance(graph_input, Command)
         yield ev("plan", "graph", resumed=resumed,
                  steps=["resume"] if resumed else ["understand", "clarify|out_of_scope|search", "offer", "confirm"])
-        request: dict | None = None
-        if resumed:
-            request = (await self.graph.aget_state(cfg)).values.get("request")
+        request: dict | None = (await self.graph.aget_state(cfg)).values.get("request")   # узлы обновят, если изменится
         held: AgentEvent | None = None  # ответ «оформить?» отдаём после события cart — ответ всегда последний
         async for update in self.graph.astream(graph_input, cfg, stream_mode="updates"):
             for node, out in update.items():
@@ -824,7 +949,7 @@ class GraphAgent:
                     if leaks(answer["text"], [system_prompt(self.today)]):   # страховка на выходе
                         answer = {**answer, "text": REFUSAL, "violations": [*answer.get("violations", []), "leak"]}
                     answer_ev = ev("answer", node, answer=answer, request=request)
-                    if node in ("offer", "out_of_scope"):
+                    if node in ("offer", "out_of_scope", "addon"):
                         held = answer_ev
                     else:
                         yield answer_ev
@@ -839,9 +964,11 @@ class GraphAgent:
             if event.type == "answer":
                 last_answer = event
         assert last_answer is not None
+        usage = last_answer.payload.get("usage") or {}
         return AgentRun(run_id=last_answer.run_id, session_id=session_id,
                         request=TripRequest(**last_answer.payload["request"]),
                         answer=AgentAnswer(**last_answer.payload["answer"]),
-                        tokens_in=0, tokens_out=0, cost=0.0,  # TODO(lead): из LLMResult/Langfuse
+                        tokens_in=usage.get("tokens_in", 0), tokens_out=usage.get("tokens_out", 0),
+                        cost=usage.get("cost_rub", 0.0),       # ₽ по цене из LLM_PRICE_*_RUB_PER_M
                         latency_ms=int((time.perf_counter() - started) * 1000),
-                        pressure_max=0.0, replans=0)
+                        pressure_max=0.0, replans=0, trace_id=last_answer.payload.get("trace_id"))
