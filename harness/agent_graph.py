@@ -29,6 +29,7 @@ import re
 import time
 import uuid
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal, TypedDict
 
@@ -53,7 +54,7 @@ from harness.contracts import (
 from harness.dates import WEEKDAYS_RU, has_date_hint, month_from_text, parse_dates, parse_shift
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
 from harness.llm import build_llm, start_usage, structured
-from harness.security import NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
+from harness.security import FILLER, NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
 from harness.trip import TripPlanner, build_planner, describe
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,8 @@ AREAS = tuple(a.name for a in AREA_LIST)
 FIXTURE_CITY = "Сочи"  # в fixtures/hotels.json все отели Большого Сочи записаны городом «Сочи»
 PET_WORDS = ("собак", "кошк", "кот ", "котом", "питом", "животн", "пёс", "пес ")
 KID_WORDS = ("ребён", "ребен", "дет", "сын", "дочь", "дочк")
+KIDS_COUNT = {"двумя": 2, "двое": 2, "два": 2, "двух": 2, "2": 2, "тремя": 3, "трое": 3, "три": 3, "трёх": 3, "трех": 3,
+              "3": 3, "четырьмя": 4, "четверо": 4, "4": 4}
 YES_WORDS = {"да", "ага", "давай", "ок", "окей", "yes", "конечно", "согласен", "согласна"}
 YES_PREFIXES = ("оформ", "подтвер", "бронир", "покупа", "оплач")
 NO_WORDS = {"нет", "no", "стоп", "отбой"}
@@ -98,6 +101,7 @@ class Understood(BaseModel):
     adults: int | None = Field(description="число взрослых, только если названо явно («двое взрослых», «вдвоём»); иначе null")
     with_kids: bool
     children_ages: list[int] = Field(description="возрасты детей, только если названы; иначе пустой список")
+    children_count: int | None = Field(description="число детей, если названо («с двумя детьми» = 2); иначе null")
     pets: bool = Field(description="едут с животным (собака, кошка и т.п.)")
     month: int | None = Field(description="номер месяца поездки 1–12")
     min_stars: int | None = Field(description="минимальная звёздность отеля, только если названа: «4★», «4 звезды»; иначе null")
@@ -161,15 +165,32 @@ def trip_summary(req: TripRequest) -> str | None:
     who = []
     if req.guests_adults:
         who.append(f"{req.guests_adults} {plural(req.guests_adults, 'взрослый', 'взрослых', 'взрослых')}")
-    kids = len(req.children_ages)
+    kids = len(req.children_ages) or req.children_count or 0
     if kids or "с детьми" in req.preferences:
-        ages = f" ({', '.join(str(a) for a in req.children_ages)} лет)" if kids else ""
+        ages = f" ({', '.join(str(a) for a in req.children_ages)} лет)" if req.children_ages else ""
         who.append((f"{kids} {plural(kids, 'ребёнок', 'ребёнка', 'детей')}" if kids > 1 else "ребёнок") + ages)
     if req.pets:
         who.append("с животным")
     parts = [", ".join(when), " + ".join(who)]
     text = " · ".join(p for p in parts if p)
     return f"Поездка: {text}." if text else None
+
+
+def kids_phrase(req: TripRequest) -> str:
+    """«с ребёнком (6 лет)», «с детьми (5, 8 лет)», «с 2 детьми»."""
+    ages = f" ({', '.join(map(str, req.children_ages))} лет)" if req.children_ages else ""
+    n = len(req.children_ages) or req.children_count or 1
+    if n == 1:
+        return f"с ребёнком{ages}"
+    return f"с детьми{ages}" if ages else f"с {n} детьми"
+
+
+def _kids_label(req: TripRequest) -> str:
+    if req.children_ages:
+        return ", ".join(map(str, req.children_ages))
+    if req.children_count and req.children_count > 1:
+        return f"{req.children_count} {plural(req.children_count, 'ребёнок', 'ребёнка', 'детей')}"
+    return "да" if (req.children_count or "с детьми" in req.preferences) else "нет"
 
 
 def rub(x: float) -> str:
@@ -186,6 +207,55 @@ def parse_choice(text: str) -> int | None:
     if m := re.search(r"(?:вариант\w*|№|номер)\s*([1-9])\b", low):
         return int(m.group(1))
     return next((n for w, n in CHOICE_WORDS.items() if w in low), None)
+
+
+# Выбор варианта по названию отеля или по типу: «давай Вертикаль», «самый дешёвый», «комфортный»
+NAME_GENERIC = {"отель", "гостевой", "гостиница", "апарт", "комплекс", "апартаменты", "хостел", "вилла", "резиденция",
+                "мини", "санаторий", "пансионат", "курорт", "hotel", "resort", "spa"}
+LABEL_RE = {"cheapest": re.compile(r"дешевле\s+всего|сам\w*\s+деш[её]в|дешёвый\s+вариант|дешевый\s+вариант"),
+            "most_comfortable": re.compile(r"комфорт"), "balanced": re.compile(r"оптимал")}
+PICK_FILLER = {"вариант", "варианта", "номер", "этот", "эту", "это", "его", "её", "ее", "отель", "гостиница", "беру",
+               "берём", "берем", "возьму", "возьмём", "возьмем", "хочу", "мне", "нам", "пожалуйста", "тогда", "лучше",
+               "же", "я", "сказал", "сказала", "в", "на", "и", "а", "вот", "так", "ну", "ок", "ладно", "тот", "который"}
+_AREA_STEMS = {t[:4] for a in AREAS for t in re.findall(r"[а-яё]{4,}", a.lower())}
+
+
+def _name_stems(name: str) -> set[str]:
+    """«Отель «Вертикаль» (Адлер)» → {"вертика"}: слова названия без общих слов и без названий районов."""
+    name = re.sub(r"\([^)]*\)", " ", name.lower())
+    words = [w for w in re.findall(r"[а-яёa-z]{4,}", name) if w not in NAME_GENERIC and w[:4] not in _AREA_STEMS]
+    return {w[:max(4, len(w) - 2)] for w in words}
+
+
+@dataclass
+class Pick:
+    choice: int | None = None                         # однозначно выбранный вариант (1…N)
+    ambiguous: list[int] = field(default_factory=list)  # название подходит к нескольким вариантам
+    unknown: list[str] = field(default_factory=list)    # слова, которые не поняли (не «да», не номер, не название)
+
+
+def pick_variant(text: str, its: list[dict]) -> Pick:
+    """Какой вариант выбрал пользователь в коротком ответе: номер, название отеля или тип варианта."""
+    low = text.lower()
+    if (n := parse_choice(text)) is not None:
+        return Pick(choice=n)
+    words = re.findall(r"[а-яёa-z0-9]+", low)
+    hits: set[int] = set()
+    used: set[str] = set()
+    for i, it in enumerate(its, 1):
+        stems = _name_stems(it["hotel"]["hotel"]["name"])
+        for w in words:
+            if any(w.startswith(st) for st in stems):
+                hits.add(i)
+                used.add(w)
+        if (rx := LABEL_RE.get(it["label"])) and rx.search(low):
+            hits.add(i)
+            used.update(w for w in words if rx.search(w) or w in ("самый", "всего", "дешевле"))
+    unknown = [w for w in words if w not in used and w not in PICK_FILLER and w not in YES_WORDS and w not in FILLER
+               and not w.startswith(YES_PREFIXES) and not w.isdigit()]
+    if len(hits) == 1:
+        return Pick(choice=hits.pop(), unknown=unknown)
+    return Pick(ambiguous=sorted(hits), unknown=unknown)
 
 
 def yes_no(text: str) -> bool | None:
@@ -219,7 +289,10 @@ def rules_parse(text: str, today: date) -> Understood:
     m = re.search(r"(?:до|бюджет)\s*(\d{1,3}(?:[ \u00a0]\d{3})+|\d+)\s*(тыс|к\b)?", low)   # «30 000 ₽», «50 тыс»
     budget = int(re.sub(r"\D", "", m.group(1))) * (1000 if m.group(2) else 1) if m else None
     checkin, checkout, _ = parse_dates(text, today)
-    ages = [int(x) for x in re.findall(r"(\d{1,2})\s*(?:лет|год)", low)]
+    ages = [int(x) for grp in re.findall(r"((?:\d{1,2}\s*(?:,|и)\s*)*\d{1,2})\s*(?:лет|год)", low)
+            for x in re.findall(r"\d{1,2}", grp)]                     # «5 и 8 лет», «4, 9 лет»
+    kids_n = next((n for w, n in KIDS_COUNT.items()
+                   if re.search(rf"\b{w}\s+(?:\w+\s+)?(?:дет|детьми|ребят|ребён|ребен|сын|доч)", low)), None)
     adults = 2 if re.search(r"\b(вдвоём|вдвоем|с женой|с мужем)\b", low) else None
     if g := re.search(r"\b(двое|трое|четверо|пятеро|шестеро)\s+взросл", low):
         adults = {"двое": 2, "трое": 3, "четверо": 4, "пятеро": 5, "шестеро": 6}[g.group(1)]
@@ -231,7 +304,7 @@ def rules_parse(text: str, today: date) -> Understood:
                       checkout=checkout.isoformat() if checkout else None,
                       nights=int(n.group(1)) if (n := re.search(r"(\d{1,2})\s*ноч", low)) else 7 if "недел" in low else None,
                       adults=adults,
-                      with_kids=bool(ages) or any(k in low for k in KID_WORDS), children_ages=ages,
+                      with_kids=bool(ages) or any(k in low for k in KID_WORDS), children_ages=ages, children_count=kids_n,
                       pets=any(k in f"{low} " for k in PET_WORDS), month=month_from_text(text),
                       min_stars=int(st.group(1)) if (st := re.search(r"([2-5])\s*(?:★|\*|зв)", low)) else None,
                       beach_line=bool(re.search(r"перв\w*\s+(?:берегов\w*\s+)?лини", low)),
@@ -272,10 +345,9 @@ def request_assumptions(req: TripRequest, notes: list[str | None] = ()) -> list[
         reason = ("Точных дат нет — напишите дату заезда." if req.nights      # ночи уже видны в «Поездка: …»
                   else "Даты не назвали — напишите, когда и на сколько ночей едете.")
         out.append(Assumption(field="dates", value=None, reason=reason))
-    if req.children_ages or "с детьми" in req.preferences:
-        ages = f" ({', '.join(str(a) for a in req.children_ages)} лет)" if req.children_ages else ""
-        out.append(Assumption(field="children", value=req.children_ages or True,
-                              reason=f"Учёл: едете с ребёнком{ages}. Фильтр «подходит для детей» пока не поддерживается."))
+    if req.children_ages or req.children_count or "с детьми" in req.preferences:
+        out.append(Assumption(field="children", value=req.children_ages or req.children_count or True,
+                              reason=f"Учёл: едете {kids_phrase(req)}. Фильтр «подходит для детей» пока не поддерживается."))
     if req.pets:
         out.append(Assumption(field="pets", value=True,
                               reason="Учёл: едете с животным. Фильтр «можно с животными» пока не поддерживается — "
@@ -308,6 +380,7 @@ def to_trip_request(text: str, u: Understood, today: date) -> TripRequest:
     req = TripRequest(raw_text=text, destination=u.area, budget_total=u.budget_total, nights=nights,
                        checkin=checkin, checkout=checkout, guests_adults=u.adults,
                        month=u.month or (checkin.month if checkin else None), children_ages=u.children_ages,
+                       children_count=max(len(u.children_ages), u.children_count or 0) or None,
                        pets=u.pets, preferences=[*u.wishes, *(["с детьми"] if u.with_kids and "с детьми" not in u.wishes else [])],
                        missing_fields=[] if u.area else ["destination"])
     req.hard_constraints = user_constraints(u)
@@ -347,8 +420,7 @@ def describe_changes(old: TripRequest, new: TripRequest) -> list[str]:
             ("Бюджет", rub(old.budget_total) if old.budget_total else "—",
              rub(new.budget_total) if new.budget_total else "—"),
             ("Взрослых", str(old.guests_adults or "—"), str(new.guests_adults or "—")),
-            ("Дети", ", ".join(map(str, old.children_ages)) or ("да" if "с детьми" in old.preferences else "нет"),
-             ", ".join(map(str, new.children_ages)) or ("да" if "с детьми" in new.preferences else "нет")),
+            ("Дети", _kids_label(old), _kids_label(new)),
             ("Животные", "да" if old.pets else "нет", "да" if new.pets else "нет")]
     return [f"{name}: {a} → {b}" for name, a, b in rows if a != b]
 
@@ -423,6 +495,9 @@ def merge_request(old: TripRequest, fresh: TripRequest, u: Understood, text: str
         data["guests_adults"] = u.adults
     if u.children_ages:
         data["children_ages"] = u.children_ages
+        data["children_count"] = len(u.children_ages)
+    elif u.children_count:
+        data["children_count"] = u.children_count
     data["pets"] = old.pets or u.pets
     data["preferences"] = list(dict.fromkeys([*old.preferences, *fresh.preferences]))
     new_keys = {c.key for c in fresh.hard_constraints}
@@ -442,6 +517,8 @@ def apply_patch(old: TripRequest, patch: dict) -> tuple[TripRequest, list[str]]:
             log.warning("patch: неизвестный район %r — пропускаю", value)
             continue
         data[key] = value
+    if "children_ages" in patch:
+        data["children_count"] = len(data["children_ages"] or []) or None
     if "checkin" in patch and "checkout" not in patch and "nights" not in patch and old.nights:
         data["checkout"] = None          # сдвинули заезд — выезд пересчитаем по числу ночей
     try:
@@ -463,6 +540,7 @@ class State(TypedDict, total=False):
     destinations: list[dict]
     answer: dict
     booking: dict        # оформленная (демо) бронь: ref, label, hotel_id, name, price_total, addons
+    reask: bool          # confirm переспрашивает («какой вариант?») — снова пауза, без покупки
 
 
 class GraphAgent:
@@ -601,8 +679,7 @@ class GraphAgent:
             Assumption(field="note", value=n, reason=n) for n in plan.notes]
         for a in req.assumptions:                   # каталог ML фильтрует по детям и животным — говорим как есть
             if a.field == "children":
-                ages = f" ({', '.join(map(str, req.children_ages))} лет)" if req.children_ages else ""
-                a.reason = f"Учёл: едете с ребёнком{ages} — показываю только отели, где можно с детьми."
+                a.reason = f"Учёл: едете {kids_phrase(req)} — показываю только отели, где можно с детьми."
             elif a.field == "pets":
                 a.reason = ("Учёл: едете с животным — показываю только отели, где можно с животными; "
                             "доплата за животное уже в цене проживания.")
@@ -677,10 +754,14 @@ class GraphAgent:
         for i, it in enumerate(its, 1):
             lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None,
                               why.get(it.label))
-        best = its[0]
+        k = 1
+        if state.get("booking") or state.get("changes"):   # «я же сказал Вертикаль» — предлагаем названный вариант
+            pick = pick_variant(state.get("text") or "", state["itineraries"])
+            k = pick.choice if pick.choice and pick.choice <= n else 1
+        best = its[k - 1]
         lines += self._replace_note(state)
-        lines.append(f"Оформить вариант 1 «{best.hotel.hotel.name}» и дорогу за {rub(best.total_price)}? "
-                     "Ответьте «да» или «нет»" + (", для другого варианта — «да, вариант 2»" if n > 1 else "")
+        lines.append(f"Оформить вариант {k} «{best.hotel.hotel.name}» и дорогу за {rub(best.total_price)}? "
+                     "Ответьте «да» или «нет»" + (f", для другого варианта — «да, вариант {2 if k == 1 else 1}»" if n > 1 else "")
                      + " (демо-оплата).")
         pending = {"tool": "purchase_mock", "label": best.label, "hotel_id": best.hotel.hotel.hotel_id,
                    "price_total": best.total_price, "source_call_id": best.hotel.hotel.source_call_id}
@@ -727,31 +808,48 @@ class GraphAgent:
         return "confirm" if state["answer"]["mode"] == AgentMode.CONFIRM_ACTION.value else END
 
     async def _confirm(self, state: State) -> State:
-        """Пауза до ответа пользователя. Покупку вызывает только код и только после явного «да» (DesignDoc §10)."""
-        reply = interrupt(state["answer"]["pending_action"])
-        decision = yes_no(str(reply))
+        """Пауза до ответа пользователя. Покупку вызывает только код и только после явного «да» (DesignDoc §10).
+        Вариант — по номеру, названию отеля или типу («давай Вертикаль»); непонятный выбор — переспрашиваем."""
+        reply = str(interrupt(state["answer"]["pending_action"]))
+        decision = yes_no(reply)
+        pending = state["answer"]["pending_action"]
+        addon = pending.get("tool") == "addon_mock"
         log.info("confirm: ответ %r → %s", reply, decision)
-        addon = state["answer"]["pending_action"].get("tool") == "addon_mock"
-        if decision:
-            choice = None if addon else parse_choice(str(reply))
-            its = state.get("itineraries") or []
-            if choice and 1 < choice <= len(its):           # «да, вариант 2» — оформляем выбранный вариант
-                it = its[choice - 1]
-                pending = {**state["answer"]["pending_action"], "label": it["label"],
-                           "hotel_id": it["hotel"]["hotel"]["hotel_id"], "price_total": it["total_price"]}
-                log.info("confirm: выбран вариант %d (%s)", choice, it["label"])
-                return {"answer": {**state["answer"], "pending_action": pending}}
-            return {}
+        if decision is False:
+            if addon:
+                answer = AgentAnswer(mode=AgentMode.PLAN, text=f"Хорошо, не добавляю. Бронь {state['booking']['ref']} "
+                                                               "без изменений.")
+                return {"answer": answer.model_dump(mode="json"), "reask": False}
+            answer = AgentAnswer(mode=AgentMode.PLAN, candidates=[HotelCandidate(**h) for h in state["hotels"][:3]],
+                                 text="Хорошо, не оформляю. Можно изменить район, бюджет или даты.")
+            return {"answer": answer.model_dump(mode="json"), "reask": False}
         if addon:
-            answer = AgentAnswer(mode=AgentMode.PLAN, text=f"Хорошо, не добавляю. Бронь {state['booking']['ref']} "
-                                                           "без изменений.")
-            return {"answer": answer.model_dump(mode="json")}
-        answer = AgentAnswer(mode=AgentMode.PLAN, candidates=[HotelCandidate(**h) for h in state["hotels"][:3]],
-                             text="Хорошо, не оформляю. Можно изменить район, бюджет или даты.")
-        return {"answer": answer.model_dump(mode="json")}
+            return {"reask": False}
+        its = state.get("itineraries") or []
+        pick = pick_variant(reply, its) if its else Pick()
+        if pick.choice and 1 <= pick.choice <= len(its):
+            it = its[pick.choice - 1]
+            pending = {**pending, "label": it["label"], "hotel_id": it["hotel"]["hotel"]["hotel_id"],
+                       "price_total": it["total_price"]}
+            log.info("confirm: выбран вариант %d (%s)", pick.choice, it["label"])
+            if decision:                                 # «да, вариант 3» / «давай Вертикаль» — оформляем выбранный
+                return {"answer": {**state["answer"], "pending_action": pending}, "reask": False}
+            text = (f"Оформить вариант {pick.choice} «{it['hotel']['hotel']['name']}» и дорогу за "
+                    f"{rub(it['total_price'])}? Ответьте «да» или «нет» (демо-оплата).")
+            return {"answer": {**state["answer"], "text": text, "pending_action": pending}, "reask": True}
+        if pick.ambiguous or pick.unknown or not decision:  # не поняли, какой вариант, — не покупаем наугад
+            head = (f"Этот отель есть в вариантах {', '.join(map(str, pick.ambiguous))}. " if pick.ambiguous
+                    else "Не понял, какой вариант оформить. ")
+            log.info("confirm: выбор не понят (%s, %s) — переспрашиваю", pick.ambiguous, pick.unknown)
+            text = head + (f"Ответьте «да, вариант N» (1–{len(its)}) или «нет»." if len(its) > 1
+                           else "Ответьте «да» или «нет».")
+            return {"answer": {**state["answer"], "text": text}, "reask": True}
+        return {"reask": False}
 
     @staticmethod
     def _route_confirm(state: State) -> str:
+        if state.get("reask"):
+            return "confirm"
         return "purchase" if state["answer"]["mode"] == AgentMode.CONFIRM_ACTION.value else END
 
     async def _purchase(self, state: State) -> State:
@@ -830,7 +928,7 @@ class GraphAgent:
         b.add_conditional_edges("suggest_confirm", self._route_suggest, {"search": "search", END: END})
         b.add_conditional_edges("search", self._route_search, {"offer": "offer", "no_solution": "no_solution"})
         b.add_edge("offer", "confirm")
-        b.add_conditional_edges("confirm", self._route_confirm, {"purchase": "purchase", END: END})
+        b.add_conditional_edges("confirm", self._route_confirm, {"purchase": "purchase", "confirm": "confirm", END: END})
         for last in ("clarify", "no_solution", "purchase"):
             b.add_edge(last, END)
         return b.compile(checkpointer=InMemorySaver())
@@ -849,6 +947,10 @@ class GraphAgent:
         """Ответ «да/нет» на паузу — продолжаем граф; иначе — новый ход (текст или правка из панели)."""
         snapshot = await self.graph.aget_state(cfg)
         if not patch and snapshot.next in (("confirm",), ("suggest_confirm",)) and yes_no(text) is not None:
+            return Command(resume=text)
+        its = snapshot.values.get("itineraries") or []
+        if not patch and snapshot.next == ("confirm",) and its and len(text.split()) <= MAX_REPLY_WORDS + 2 \
+                and pick_variant(text, its).choice:      # «Вертикаль» на паузе — выбор варианта, переспросим «да?»
             return Command(resume=text)
         last = snapshot.values.get("answer") or {}
         relax = (last.get("plan") or {}).get("relax") if last.get("mode") == AgentMode.NO_SOLUTION.value else None
@@ -937,7 +1039,7 @@ class GraphAgent:
                              ok=True, n=len(out["hotels"]), itineraries=len(out.get("itineraries") or []))
                 if "answer" in out:
                     mode = out["answer"]["mode"]
-                    if node == "confirm" and mode == AgentMode.CONFIRM_ACTION.value:
+                    if node == "confirm" and mode == AgentMode.CONFIRM_ACTION.value and not out.get("reask"):
                         continue                         # «да, вариант N»: обновили pending_action, ответ дальше — покупка
                     if mode == AgentMode.CLARIFY.value:
                         yield ev("clarify", node, questions=out["answer"]["questions"])
@@ -951,7 +1053,7 @@ class GraphAgent:
                     if leaks(answer["text"], [system_prompt(self.today)]):   # страховка на выходе
                         answer = {**answer, "text": REFUSAL, "violations": [*answer.get("violations", []), "leak"]}
                     answer_ev = ev("answer", node, answer=answer, request=request)
-                    if node in ("offer", "out_of_scope", "addon"):
+                    if node in ("offer", "out_of_scope", "addon") or out.get("reask"):
                         held = answer_ev
                     else:
                         yield answer_ev

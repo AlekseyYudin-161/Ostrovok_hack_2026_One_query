@@ -55,7 +55,7 @@ def _llm(tokens_in: int, tokens_out: int) -> OpenAICompatLLM:
         content = json.dumps({"area": "Адлер", "other_destination": None, "wishes": [], "budget_total": 50000,
                               "checkin": None, "checkout": None, "nights": 7, "adults": None, "with_kids": False,
                               "children_ages": [], "pets": False, "min_stars": None, "beach_line": False,
-                              "meal": None, "month": None})
+                              "meal": None, "children_count": None, "month": None})
         return httpx.Response(200, json={"id": "x", "object": "chat.completion", "created": 0, "model": "m",
                                          "choices": [{"index": 0, "finish_reason": "stop",
                                                       "message": {"role": "assistant", "content": content}}],

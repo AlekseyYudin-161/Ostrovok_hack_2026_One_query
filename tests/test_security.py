@@ -149,7 +149,7 @@ async def test_llm_gets_clean_text_and_rule() -> None:
         seen.append(json.loads(request.content))
         content = json.dumps({"area": "Хоста", "other_destination": None, "wishes": [], "budget_total": 50000,
                               "checkin": None, "checkout": None, "nights": 7, "adults": None, "with_kids": False,
-                              "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": None})
+                              "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "children_count": None, "month": None})
         return httpx.Response(200, json={"id": "x", "object": "chat.completion", "created": 0, "model": "m",
                                          "choices": [{"index": 0, "finish_reason": "stop",
                                                       "message": {"role": "assistant", "content": content}}],
