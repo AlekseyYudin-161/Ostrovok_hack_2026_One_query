@@ -19,6 +19,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+from contextvars import ContextVar
+from dataclasses import dataclass
 
 import httpx
 from openai import AsyncOpenAI, BadRequestError
@@ -28,6 +30,45 @@ from harness.contracts import LLMClient, LLMResult
 from harness.fakes import FakeLLM
 
 log = logging.getLogger(__name__)
+
+# Цена модели, ₽ за 1 млн токенов (прайс kodikrouter для qwen/qwen3.6-35b-a3b на 27.10). Меняется через env.
+# Оценка: kodikrouter списывает цену провайдера в $ × курс × 1.1, поэтому расходится с прайсом на 1–3%.
+PRICE_IN_RUB_PER_M = 9.19
+PRICE_OUT_RUB_PER_M = 87.29
+
+
+@dataclass
+class Usage:
+    """Токены и стоимость вызовов модели за один запрос пользователя (один ход диалога)."""
+    tokens_in: int = 0
+    tokens_out: int = 0
+    calls: int = 0
+
+    def add(self, tokens_in: int, tokens_out: int) -> None:
+        self.tokens_in += tokens_in
+        self.tokens_out += tokens_out
+        self.calls += 1
+
+    @property
+    def cost_rub(self) -> float:
+        p_in = float(os.getenv("LLM_PRICE_IN_RUB_PER_M", PRICE_IN_RUB_PER_M))
+        p_out = float(os.getenv("LLM_PRICE_OUT_RUB_PER_M", PRICE_OUT_RUB_PER_M))
+        return round((self.tokens_in * p_in + self.tokens_out * p_out) / 1_000_000, 4)
+
+    def as_dict(self) -> dict:
+        return {"tokens_in": self.tokens_in, "tokens_out": self.tokens_out, "llm_calls": self.calls,
+                "cost_rub": self.cost_rub}
+
+
+# Счётчик текущего хода. Хранится в контексте задачи asyncio: параллельные запросы API не смешиваются.
+_USAGE: ContextVar[Usage | None] = ContextVar("llm_usage", default=None)
+
+
+def start_usage() -> Usage:
+    """Начать подсчёт для нового хода; все вызовы `complete()` в этом контексте добавятся в возвращённый объект."""
+    usage = Usage()
+    _USAGE.set(usage)
+    return usage
 
 
 def _make_openai(base_url: str, api_key: str, http_client: httpx.AsyncClient | None) -> AsyncOpenAI:
@@ -80,14 +121,17 @@ class OpenAICompatLLM:
             except json.JSONDecodeError:
                 log.warning("модель вернула не-JSON: %.200s", msg.content)
         usage = resp.usage
-        return LLMResult(
+        result = LLMResult(
             text=msg.content,
             tool_calls=[tc.model_dump() for tc in (msg.tool_calls or [])],
             parsed=parsed,
-            tokens_in=usage.prompt_tokens if usage else 0,
-            tokens_out=usage.completion_tokens if usage else 0,
+            tokens_in=(usage.prompt_tokens or 0) if usage else 0,
+            tokens_out=(usage.completion_tokens or 0) if usage else 0,
             model=resp.model or self.model,
         )
+        if (counter := _USAGE.get()) is not None:
+            counter.add(result.tokens_in, result.tokens_out)
+        return result
 
 
 async def structured[T: BaseModel](llm: LLMClient, messages: list[dict], model_cls: type[T],

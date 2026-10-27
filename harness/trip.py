@@ -35,8 +35,10 @@ log = logging.getLogger(__name__)
 
 DEFAULT_NIGHTS = 7
 HOUR_COST = 500      # «оптимально»: час в дороге ≈ 500 ₽ — двое суток в поезде не выигрывают у рейса ради экономии
-LONG_HOURS = 8
-NIGHT_END_HOUR = 6   # прибытие в отель / выезд из отеля раньше 06:00 — только если других вариантов нет       # «комфортно»: дольше — это поезд на сутки и больше
+LONG_HOURS = 8       # «комфортно»: дольше — это поезд на сутки и больше
+KIDS_PUBLIC_MAX_MIN = 60   # с ребёнком автобус/электричка дольше часа — не предлагаем, если есть такси/трансфер
+KIDS_MINUTE_COST = 50      # «оптимально» с ребёнком: минута в трансфере дороже — быстрее такси, а не долгий шаттл
+NIGHT_END_HOUR = 6   # прибытие в отель / выезд из отеля раньше 06:00 — только если других вариантов нет
 DEFAULT_ADULTS = 2
 DEFAULT_ORIGIN = "Москва"
 # «из Казани», «из Питера» → город вылета из справочника ML (основа слова → город)
@@ -197,6 +199,15 @@ class TripPlanner:
         log.info("inspire: месяц %s, пожелания %s → %s", month, req.preferences, [r["name"] for r in rows])
         return [DestinationOption(**{k: v for k, v in r.items() if k != "facts"}) for r in rows]
 
+    def addon(self, hotel_id: str, kind: str) -> tuple[int | None, str | None]:
+        """L14: цена раннего заезда / позднего выезда и стандартное время; (None, …) — услуга не предоставляется."""
+        h = self.cat.hotels.get(hotel_id)
+        if h is None:
+            return None, None
+        if kind == "early_checkin":
+            return h.early_checkin_fee, h.check_in_time
+        return h.late_checkout_fee, h.check_out_time
+
     def stars(self, hotel_id: str) -> int | None:
         h = self.cat.hotels.get(hotel_id)
         return h.stars if h else None
@@ -313,15 +324,17 @@ class TripPlanner:
         if not frm or not to:
             return None
         opts = self.cat.transfer_options(frm, to, when, adults, kids, pets)
-        if pets:                                   # с животным — без автобусов и электричек, если есть такси
-            opts = [t for t in opts if t.kind != "public"] or opts
+        def unfit(t: TransferOption) -> bool:      # с животным — без автобусов и электричек; с ребёнком — без долгих
+            return t.kind == "public" and (pets or (bool(kids) and t.minutes > KIDS_PUBLIC_MAX_MIN))
+        opts = [t for t in opts if not unfit(t)] or opts
         if not opts:
             return None
         if label == "most_comfortable":
             taxi = [t for t in opts if t.kind == "taxi"]
             return min(taxi or opts, key=lambda t: (t.minutes, t.price_total))
         if label == "balanced":
-            return min(opts, key=lambda t: t.price_total + 20 * t.minutes)     # минута в пути ≈ 20 ₽
+            minute = KIDS_MINUTE_COST if kids else 20                          # минута в пути ≈ 20 ₽, с ребёнком — 50 ₽
+            return min(opts, key=lambda t: t.price_total + minute * t.minutes)
         return opts[0]                                                         # отсортированы по цене
 
 
