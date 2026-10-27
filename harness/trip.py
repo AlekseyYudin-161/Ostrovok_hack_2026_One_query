@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from harness.contracts import (
     ConnectionCheck,
     HotelOffer,
     Itinerary,
+    Tradeoff,
     TransferOption,
     TransportOption,
     TripRequest,
@@ -41,6 +43,11 @@ ORIGIN_STEMS = {"москв": "Москва", "питер": "Санкт-Пете
                 "екатеринбург": "Екатеринбург", "казан": "Казань", "новосибирск": "Новосибирск", "самар": "Самара",
                 "нижн": "Нижний Новгород", "перм": "Пермь", "уф": "Уфа", "воронеж": "Воронеж",
                 "ростов": "Ростов-на-Дону", "краснодар": "Краснодар"}
+MEAL_RU = {"breakfast": "завтрак", "half_board": "полупансион", "full_board": "полный пансион",
+           "all_inclusive": "всё включено"}
+MEAL_AT_LEAST = {"breakfast": ["breakfast", "half_board", "full_board", "all_inclusive"],
+                 "half_board": ["half_board", "full_board", "all_inclusive"],
+                 "full_board": ["full_board", "all_inclusive"], "all_inclusive": ["all_inclusive"]}
 LABEL_RU = {"cheapest": "Дешевле всего", "balanced": "Оптимально", "most_comfortable": "Комфортно"}
 KIND_RU = {"flight": "рейс", "train": "поезд", "local_train": "«Ласточка»", "bus": "автобус",
            "taxi": "такси", "shuttle": "шаттл", "public": "общественный транспорт"}
@@ -53,6 +60,12 @@ class TripPlan:
     notes: list[str] = field(default_factory=list)       # допущения, которые показываем пользователю
     checkin: date | None = None
     checkout: date | None = None
+    relax: list[dict] = field(default_factory=list)       # L7: что поменять, если вариантов нет (patch для агента)
+
+
+def constraint(req: TripRequest, key: str):
+    """Значение жёсткого условия пользователя («от 4★», «первая линия») или None."""
+    return next((c.value for c in req.hard_constraints if c.key == key), None)
 
 
 def origin_from_text(text: str) -> str | None:
@@ -127,11 +140,19 @@ class TripPlanner:
         elif not origin_from_text(req.raw_text):
             out.notes.append(f"Город отправления — {origin} (по умолчанию); напишите, если едете из другого.")
 
-        out.hotels = self.cat.search_hotels(checkin, checkout, adults, kids, req.pets, area_ids=[aid],
-                                            max_total=req.budget_total, limit=50)
-        log.info("trip: %s %s–%s, %d взр., дети %s, животные %s → %d отелей", aid, checkin, checkout, adults, kids,
-                 req.pets, len(out.hotels))
+        stars, line, meal = constraint(req, "min_stars"), constraint(req, "beach_line"), constraint(req, "meal")
+        if meal:
+            out.notes.append(f"Учёл: питание — {MEAL_RU.get(meal, meal)}.")
+        if stars:
+            out.notes.append(f"Учёл: отели от {stars}★.")
+        if line:
+            out.notes.append("Учёл: только первая линия у моря.")
+        ctx = {"checkin": checkin, "checkout": checkout, "adults": adults, "kids": kids, "pets": req.pets, "meal": meal}
+        out.hotels = self._hotels(ctx, aid, req.budget_total, stars, line)
+        log.info("trip: %s %s–%s, %d взр., дети %s, животные %s, от %s★, линия %s → %d отелей", aid, checkin,
+                 checkout, adults, kids, req.pets, stars, line, len(out.hotels))
         if not out.hotels:
+            out.relax = self._relax(ctx, aid, req.budget_total, stars, line)
             return out
 
         kinds = None if "any" in req.transport else [k for k in req.transport if k != "any"]
@@ -150,6 +171,58 @@ class TripPlanner:
             if key not in seen:
                 seen.add(key)
                 out.itineraries.append(it)
+        explain(out.itineraries)
+        return out
+
+    def stars(self, hotel_id: str) -> int | None:
+        h = self.cat.hotels.get(hotel_id)
+        return h.stars if h else None
+
+    def _hotels(self, ctx: dict, aid: str, budget: float | None, stars: int | None, line: int | None,
+                limit: int = 50) -> list[HotelOffer]:
+        best: dict[str, HotelOffer] = {}
+        for meal in MEAL_AT_LEAST.get(ctx.get("meal"), [None]):     # «с завтраком» — подходит и полупансион
+            for o in self.cat.search_hotels(ctx["checkin"], ctx["checkout"], ctx["adults"], ctx["kids"], ctx["pets"],
+                                            area_ids=[aid], max_total=budget, min_stars=stars, meal=meal, limit=limit):
+                if o.hotel.hotel_id not in best or o.price_total < best[o.hotel.hotel_id].price_total:
+                    best[o.hotel.hotel_id] = o
+        offers = sorted(best.values(), key=lambda o: o.price_total)
+        if line:
+            offers = [o for o in offers if (self.cat.hotels[o.hotel.hotel_id].beach_line or 99) <= line]
+        return offers[:limit]
+
+    def _relax(self, ctx: dict, aid: str, budget: float | None, stars: int | None, line: int | None) -> list[dict]:
+        """L7: вариантов нет — считаем по каталогу, что конкретно поменять (цена — настоящая, не заготовка)."""
+        out: list[dict] = []
+        if budget:
+            cheapest = self._hotels(ctx, aid, None, stars, line, limit=1)
+            if cheapest:
+                price = cheapest[0].price_total                  # в тексте — только цены из каталога (Groundedness)
+                out.append({"title": "Поднять бюджет", "result": f"от {_rub(price)}",
+                            "text": "Появятся варианты в этом районе, остальное без изменений.",
+                            "patch": {"budget_total": math.ceil(price)},
+                            "hotel": cheapest[0].hotel.model_dump(mode="json")})
+        if stars or line or ctx.get("meal"):
+            plain = self._hotels({**ctx, "meal": None}, aid, budget, None, None, limit=1)
+            if plain:
+                what = ", ".join(x for x in (f"{stars}★" if stars else "", "первую линию" if line else "",
+                                             MEAL_RU.get(ctx["meal"], "") if ctx.get("meal") else "") if x)
+                out.append({"title": f"Не требовать {what}", "result": f"от {_rub(plain[0].price_total)}",
+                            "text": "Тот же район, даты и бюджет.", "patch": {"hard_constraints": []},
+                            "hotel": plain[0].hotel.model_dump(mode="json")})
+        other_best: tuple[str, HotelOffer] | None = None
+        for other in self.cat.areas:
+            if other == aid:
+                continue
+            found = self._hotels(ctx, other, budget, stars, line, limit=1)
+            if found and (other_best is None or found[0].price_total < other_best[1].price_total):
+                other_best = (other, found[0])
+        if other_best:
+            oid, offer = other_best
+            out.append({"title": f"Другой район: {self.cat.areas[oid].name}", "result": f"от {_rub(offer.price_total)}",
+                        "text": "Те же даты и условия.", "patch": {"destination_id": oid},
+                        "hotel": offer.hotel.model_dump(mode="json")})
+        log.info("relax: %s", [r["title"] for r in out])
         return out
 
     def _variant(self, label: str, hotels: list[HotelOffer], outs: list[TransportOption], backs: list[TransportOption],
@@ -291,10 +364,41 @@ def _rub(x: float) -> str:
     return f"{x:,.0f}".replace(",", " ") + " ₽"
 
 
-def describe(it: Itinerary, n: int) -> list[str]:
+def explain(its: list[Itinerary]) -> None:
+    """L9 explain: чем каждый вариант хуже лучшего по признаку (Itinerary.tradeoffs, интерфейс их показывает)."""
+    if len(its) < 2:
+        return
+
+    def road_h(it: Itinerary) -> float:
+        return sum(t.duration_hours for t in (it.outbound, it.inbound) if t)
+
+    min_total = min(it.total_price for it in its)
+    min_road = min(road_h(it) for it in its)
+    max_rating = max((it.hotel.hotel.rating or 0) for it in its)
+    for it in its:
+        t: list[Tradeoff] = []
+        if it.total_price > min_total:
+            t.append(Tradeoff(criterion="price", this_value=it.total_price, best_value=min_total,
+                              note=f"дороже самого дешёвого варианта на {round(100 * (it.total_price / min_total - 1))}%"))
+        if road_h(it) - min_road >= 3:
+            t.append(Tradeoff(criterion="travel_time", this_value=road_h(it), best_value=min_road,
+                              note=f"в дороге дольше на ≈{round(road_h(it) - min_road)} ч"))
+        rating = it.hotel.hotel.rating or 0
+        if max_rating - rating >= 0.3:
+            t.append(Tradeoff(criterion="rating", this_value=rating, best_value=max_rating,
+                              note=f"рейтинг отеля {rating} против {max_rating}"))
+        if any("без багажа" in (x.carrier or "") for x in (it.outbound, it.inbound) if x):
+            t.append(Tradeoff(criterion="baggage", this_value=False, best_value=True, note="перелёт без багажа"))
+        if not it.hotel.refundable:
+            t.append(Tradeoff(criterion="cancellation", this_value=False, best_value=True,
+                              note="без бесплатной отмены"))
+        it.tradeoffs = t
+
+
+def describe(it: Itinerary, n: int, stars: int | None = None) -> list[str]:
     """Строки варианта для ответа пользователю: что, когда, сколько и какие риски."""
     h = it.hotel
-    rating = f", рейтинг {h.hotel.rating}" if h and h.hotel.rating else ""
+    rating = (f", {stars}★" if stars else "") + (f", рейтинг {h.hotel.rating}" if h and h.hotel.rating else "")
     lines = [f"{n}) {LABEL_RU[it.label]}: «{h.hotel.name}»{rating} — {_rub(h.price_total)} за проживание."]
     road = 0.0
     for t, word in ((it.outbound, "Туда"), (it.inbound, "Обратно")):
@@ -308,6 +412,8 @@ def describe(it: Itinerary, n: int) -> list[str]:
         lines.append(f"   Трансфер: {KIND_RU[tr.kind]}, ≈{tr.minutes} мин, туда-обратно "
                      f"{_rub(sum(t.price_total for t in it.transfers))}.")
     lines.append(f"   Итого поездка: {_rub(it.total_price)} (проживание {_rub(h.price_total)} + дорога {_rub(road)}).")
+    if it.tradeoffs:
+        lines.append("   Минусы: " + "; ".join(t.note for t in it.tradeoffs) + ".")
     lines += [f"   ⚠ {c.message}" + (f" Можно: {', '.join(c.fixes)}." if c.fixes else "")
               for c in it.checks if c.severity in ("warning", "error")]
     return lines
