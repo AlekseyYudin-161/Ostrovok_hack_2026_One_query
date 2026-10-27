@@ -22,6 +22,7 @@ from statistics import median
 from harness.checks import AFTER_ARRIVAL_MIN, BEFORE_DEPARTURE_MIN, check_connections
 from harness.contracts import (
     ConnectionCheck,
+    DestinationOption,
     HotelOffer,
     Itinerary,
     Tradeoff,
@@ -173,6 +174,28 @@ class TripPlanner:
                 out.itineraries.append(it)
         explain(out.itineraries)
         return out
+
+    def rank_areas(self, req: TripRequest, today: date, limit: int = 3) -> list[DestinationOption]:
+        """L8 inspire: районы на месяц поездки по пожеланиям — инструмент ML RankAreas (погода, дорога, оценка цены)."""
+        try:
+            from synth.tools import RankAreas, RankAreasArgs, ToolError
+        except ImportError:
+            return []
+        month = req.month or (req.checkin.month if req.checkin else assumed_checkin(today, None).month)
+        kids = req.children_ages or ([7] if "с детьми" in req.preferences else [])
+        origin = origin_from_text(req.raw_text) or req.origin_city or DEFAULT_ORIGIN
+        if origin not in self.cat.origins:
+            origin = DEFAULT_ORIGIN
+        args = RankAreasArgs(month=month, origin_city=origin, adults=min(req.guests_adults or DEFAULT_ADULTS, 8),
+                             children_ages=kids, nights=min(req.nights or DEFAULT_NIGHTS, 30),
+                             wishes=list(req.preferences), limit=limit)   # бюджет у RankAreas — на всю поездку, у нас — отель
+        try:
+            rows = RankAreas(self.cat).run(args, "inspire")
+        except (ToolError, ValueError):
+            log.warning("inspire: RankAreas не отработал", exc_info=True)
+            return []
+        log.info("inspire: месяц %s, пожелания %s → %s", month, req.preferences, [r["name"] for r in rows])
+        return [DestinationOption(**{k: v for k, v in r.items() if k != "facts"}) for r in rows]
 
     def stars(self, hotel_id: str) -> int | None:
         h = self.cat.hotels.get(hotel_id)
@@ -351,7 +374,9 @@ def _transport_key(label: str, direction: str) -> Callable[[TransportOption], tu
     if label == "most_comfortable":
         return lambda o: (changes(o), o.duration_hours > LONG_HOURS, not convenient(o), basic(o), o.duration_hours,
                           o.price_total)
-    return lambda o: (changes(o), not convenient(o), o.price_total + HOUR_COST * o.duration_hours)
+    # «оптимально»: сутки в поезде не выигрывают у рейса, если рейс есть (поезд берём, только когда других нет)
+    return lambda o: (changes(o), o.duration_hours > LONG_HOURS, not convenient(o),
+                      o.price_total + HOUR_COST * o.duration_hours)
 
 
 def _plural(n: int, one: str, few: str, many: str) -> str:
