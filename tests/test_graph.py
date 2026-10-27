@@ -92,7 +92,7 @@ async def test_llm_structured_path() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Сириус", "other_destination": None, "wishes": ["с детьми"], "budget_total": 70000,
              "checkin": "2026-11-02", "checkout": "2026-11-05", "nights": 3, "adults": 2, "with_kids": True,
-             "children_ages": [6], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
+             "children_ages": [6], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "children_count": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m", extra_body={"reasoning": {"enabled": False}},
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -305,7 +305,7 @@ async def test_llm_invented_dates_dropped() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Адлер", "other_destination": None, "wishes": ["бюджетно"], "budget_total": 50000,
              "checkin": "2026-10-30", "checkout": "2026-11-06", "nights": 7, "adults": None, "with_kids": False,
-             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 10}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "children_count": None, "month": 10}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -324,7 +324,7 @@ async def test_sochi_without_area_picks_one() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": None, "other_destination": None, "wishes": ["море"], "budget_total": 60000,
              "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
-             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "children_count": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -352,7 +352,7 @@ async def test_llm_area_without_text_support_dropped() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Адлер", "other_destination": None, "wishes": ["море"], "budget_total": 60000,
              "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
-             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "children_count": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))

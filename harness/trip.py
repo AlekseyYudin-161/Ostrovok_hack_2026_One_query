@@ -40,6 +40,7 @@ KIDS_PUBLIC_MAX_MIN = 60   # с ребёнком автобус/электрич
 KIDS_MINUTE_COST = 50      # «оптимально» с ребёнком: минута в трансфере дороже — быстрее такси, а не долгий шаттл
 NIGHT_END_HOUR = 6   # прибытие в отель / выезд из отеля раньше 06:00 — только если других вариантов нет
 DEFAULT_ADULTS = 2
+ASSUMED_KID_AGE = 7  # возраст не назвали: цена билетов и мест зависит от возраста
 DEFAULT_ORIGIN = "Москва"
 # «из Казани», «из Питера» → город вылета из справочника ML (основа слова → город)
 ORIGIN_STEMS = {"москв": "Москва", "питер": "Санкт-Петербург", "петербург": "Санкт-Петербург", "спб": "Санкт-Петербург",
@@ -132,9 +133,10 @@ class TripPlanner:
         adults = req.guests_adults or DEFAULT_ADULTS
         if not req.guests_adults:
             out.notes.append(f"Считаю на {adults} взрослых — поправьте, если иначе.")
-        kids = req.children_ages or ([7] if "с детьми" in req.preferences else [])
-        if "с детьми" in req.preferences and not req.children_ages:
-            out.notes.append("Возраст ребёнка не назвали — считаю 7 лет (цена билетов и мест зависит от возраста).")
+        kids = kids_ages(req)
+        if kids and not req.children_ages:
+            out.notes.append(("Возраст детей не назвали — считаю по 7 лет" if len(kids) > 1 else
+                              "Возраст ребёнка не назвали — считаю 7 лет") + " (цена билетов и мест зависит от возраста).")
 
         origin = origin_from_text(req.raw_text) or req.origin_city or DEFAULT_ORIGIN
         if origin not in self.cat.origins:
@@ -196,7 +198,7 @@ class TripPlanner:
             from synth.scoring import ScoreContext, score_hotels
         except ImportError:
             return {}
-        kids = req.children_ages or ([7] if "с детьми" in req.preferences else [])
+        kids = kids_ages(req)
         ctx = ScoreContext(today=today, checkin=req.checkin, children_ages=kids, pets=req.pets,
                            wishes=list(req.preferences), meal_required=constraint(req, "meal"))
         scored = {s.offer.offer_id: s for s in score_hotels(self.cat, [it.hotel for it in its if it.hotel], ctx)}
@@ -210,7 +212,7 @@ class TripPlanner:
         except ImportError:
             return []
         month = req.month or (req.checkin.month if req.checkin else assumed_checkin(today, None).month)
-        kids = req.children_ages or ([7] if "с детьми" in req.preferences else [])
+        kids = kids_ages(req)
         origin = origin_from_text(req.raw_text) or req.origin_city or DEFAULT_ORIGIN
         if origin not in self.cat.origins:
             origin = DEFAULT_ORIGIN
@@ -362,6 +364,14 @@ class TripPlanner:
             minute = KIDS_MINUTE_COST if kids else 20                          # минута в пути ≈ 20 ₽, с ребёнком — 50 ₽
             return min(opts, key=lambda t: t.price_total + minute * t.minutes)
         return opts[0]                                                         # отсортированы по цене
+
+
+def kids_ages(req: TripRequest) -> list[int]:
+    """Возрасты детей для поиска: названные; если не названы — по 7 лет на каждого (число — если названо, иначе 1)."""
+    if req.children_ages:
+        return list(req.children_ages)
+    n = req.children_count or (1 if "с детьми" in req.preferences else 0)
+    return [ASSUMED_KID_AGE] * n
 
 
 def _night(it: Itinerary) -> bool:
