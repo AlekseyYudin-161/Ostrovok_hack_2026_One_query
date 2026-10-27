@@ -1,4 +1,5 @@
 """L8: сборка поездки на каталоге ML (synth/). Без папки synth/ тесты пропускаются."""
+
 from datetime import date, timedelta
 
 import pytest
@@ -177,3 +178,23 @@ async def test_choice_gives_single_answer(planner: TripPlanner) -> None:
     await agent.run("Адлер с 6 ноября на 5 ночей, вдвоём", "s-one")
     answers = [e async for e in agent.stream("да, вариант 2", "s-one") if e.type == "answer"]
     assert len(answers) == 1 and answers[0].payload["answer"]["mode"] == "purchased"
+
+
+@pytest.mark.asyncio
+async def test_inspire_ranks_areas(planner: TripPlanner) -> None:
+    """L8 inspire: район не назван — RankAreas ML выбирает лучший на месяц, альтернативы — в answer.destinations."""
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    run = await agent.run("Хочу на море с ребёнком 6 лет в июле на неделю", "s-inspire")
+    assert run.answer.mode.value == "confirm_action" and run.request.destination
+    names = [d.name for d in run.answer.destinations]
+    assert names and names[0] == run.request.destination and "Район не назвали — подобрал район" in run.answer.text
+    assert all("море" in " ".join(d.why) for d in run.answer.destinations)
+    switched = await agent.run(f"а если {names[-1]}?", "s-inspire") if len(names) > 1 else run
+    assert switched.request.destination == names[-1] and switched.request.month == 7
+
+
+@pytest.mark.asyncio
+async def test_inspire_skips_poor_alternatives(planner: TripPlanner) -> None:
+    run = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run(
+        "хочу в горы на лыжи в январе на 5 ночей, вдвоём", "s-ski")
+    assert all("горы/лыжи" in d.best_for for d in run.answer.destinations)

@@ -19,6 +19,7 @@
 Включение: AGENT_BACKEND=graph. Модель — по переменным LLM_* (`harness/llm.py`); при LLM_PROVIDER=fake
 разбор идёт по правилам, без сети и без денег.
 """
+
 from __future__ import annotations
 
 import logging
@@ -435,6 +436,7 @@ class State(TypedDict, total=False):
     hotels: list[dict]
     itineraries: list[dict]
     relax: list[dict]
+    destinations: list[dict]
     answer: dict
 
 
@@ -479,10 +481,40 @@ class GraphAgent:
             log.info("replan: %s", changes)
         else:
             req, changes = fresh, []
+        destinations: list[dict] = []
         if not req.destination and not u.other_destination:
-            req = pick_area(req)
+            req, destinations = self._inspire(req)
         return {"request": req.model_dump(mode="json"), "hotels": [], "itineraries": [], "changes": changes,
+                "destinations": destinations,
                 "other_destination": None if req.destination else safe_place(u.other_destination)}
+
+    def _inspire(self, req: TripRequest) -> tuple[TripRequest, list[dict]]:
+        """L8 inspire: район не назван — ранжируем районы на месяц (RankAreas ML), берём лучший и показываем ещё два.
+        Без каталога — прежний подбор по пожеланиям (pick_area)."""
+        wishes = [w for w in req.preferences if w in WISHES]
+        sochi = "сочи" in req.raw_text.lower()
+        ranked = self.planner.rank_areas(req, self.today) if self.planner and wishes else []
+        cards = []
+        for d in ranked:                                # названия районов каталога → названия районов агента (для patch)
+            name = next((a.name for a in AREA_LIST if self.planner.area_id(a.name) == d.destination_id), None)
+            if name:
+                cards.append(d.model_copy(update={"name": name}))
+        if cards:                                       # альтернативы — только почти такие же хорошие, без «нулевых»
+            best = cards[0].score or 0
+            cards = [cards[0]] + [c for c in cards[1:] if (c.score or 0) > 0 and (c.score or 0) >= best - 1]
+        if not cards or (sochi and not wishes):         # сказали только «Сочи» — берём сам город, остальные — как альтернативы
+            req = pick_area(req)
+        else:
+            top = cards[0]
+            why = ", ".join(r.removeprefix("подходит: ") for r in top.why[:2])
+            req.destination, req.missing_fields = top.name, []
+            req.assumptions = [*req.assumptions, Assumption(field="destination", value=top.name, reason=(
+                f"Район не назвали — подобрал район «{top.name}» ({why})."))]
+        others = [c.name for c in cards if c.name != req.destination][:2] if wishes else []   # без пожеланий сравнивать не с чем
+        if others and req.destination:
+            req.assumptions = [*req.assumptions, Assumption(field="note", value=others, reason=(
+                f"Ещё подойдут: {', '.join(others)} — назовите район, пересоберу."))]
+        return req, [c.model_dump(mode="json") for c in cards]
 
     @staticmethod
     def _route_understand(state: State) -> str:
@@ -579,7 +611,7 @@ class GraphAgent:
         else:
             tail = "Поднять бюджет или посмотреть другой район?"
         answer = AgentAnswer(mode=AgentMode.NO_SOLUTION, assumptions=req.assumptions, changes=state.get("changes", []),
-                             plan={"relax": relax} if relax else None,
+                             plan={"relax": relax} if relax else None, destinations=state.get("destinations") or [],
                              text=(f"{trip_summary(req)}\n" if trip_summary(req) else "") + changed
                                   + f"{req.destination}: нет вариантов{limit}.\n" + tail)
         return {"answer": answer.model_dump(mode="json")}
@@ -625,6 +657,7 @@ class GraphAgent:
                    "price_total": best.total_price, "source_call_id": best.hotel.hotel.source_call_id}
         answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, text="\n".join(lines),
                              candidates=[it.hotel.hotel for it in its], itineraries=its,
+                             destinations=state.get("destinations") or [],
                              changes=state.get("changes", []), assumptions=req.assumptions, pending_action=pending)
         return {"answer": answer.model_dump(mode="json")}
 
