@@ -132,9 +132,28 @@ def guard_input(text: str) -> GuardResult:
     return result
 
 
+# Только для недоверенных данных (отзывы, описания): обращение к агенту и команды «как ранжировать / что оплатить».
+# Пользователю обращаться к агенту можно («агент, найди Адлер»), автору отзыва — нет.
+UNTRUSTED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in (
+    r"(внимание|attention|note)\W{0,3}(агент|ассистент|бот|модел|нейросет|ai\b|assistant|agent|model|llm)",
+    r"^\W*(агент|ассистент|бот|нейросеть|assistant|agent|ai|llm)\s*[,:!]",
+    (r"(рекомендуй|советуй|ставь|поставь|показывай|отметь|примени|забронируй|бронируй|оплати|измени|скажи)\w*\s+"
+     r"(?:\w+\s+){0,4}(только|первым|оплачен|скидк|бесплатн|без\s+подтвержд)"),
+    r"скидк\w*\s+(?:в\s+)?\d+\s*%",
+    (r"\b(recommend|rank|mark|apply|book|say|tell)\b\s+(?:\w+\s+){0,4}"
+     r"(only|first|as\s+paid|discount|free|without\s+confirmation)"),
+)]
+
+
+def detect_untrusted(text: str) -> list[str]:
+    found = detect(text)
+    low = normalize(text).lower()
+    return found + (["untrusted_command"] if any(r.search(low) for r in UNTRUSTED_PATTERNS) else [])
+
+
 def wrap_untrusted(text: str, source: str) -> str:
     """Отзывы, описания и любые выходы инструментов — данные, а не инструкции (spotlighting)."""
-    body = " ".join(s.strip() for s in _SENTENCE.findall(normalize(text)) if not detect(s)) or "[текст скрыт]"
+    body = " ".join(s.strip() for s in _SENTENCE.findall(normalize(text)) if not detect_untrusted(s)) or "[текст скрыт]"
     return f"<<НЕДОВЕРЕННЫЕ ДАННЫЕ source={source}>> {body} <</НЕДОВЕРЕННЫЕ ДАННЫЕ>>"
 
 
