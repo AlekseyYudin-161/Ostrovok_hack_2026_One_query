@@ -39,7 +39,7 @@ def esc(x: Any) -> str:
     return html.escape(str(x), quote=True)
 
 
-def rub(n: float | int | None) -> str:
+def rub(n: float | None) -> str:
     return "—" if n is None else f"{round(n):,}".replace(",", " ") + " ₽"
 
 

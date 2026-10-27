@@ -63,8 +63,9 @@ def run_agent(text: str, patch: dict | None = None) -> None:
     st.session_state.answer, st.session_state.request = ans, res["request"] or S("request")
     if (ans.get("mode") or "plan") == "plan":
         st.session_state.chosen = None
-    if res["booking_ref"]:
-        st.session_state.booking_ref = res["booking_ref"]
+    ref = res["booking_ref"] or (ans.get("plan") or {}).get("booking_ref")
+    if ref:
+        st.session_state.booking_ref = ref
     mode = ans.get("mode")
     if mode == "clarify":
         go("clarify")
@@ -291,6 +292,9 @@ def confirm() -> None:
 def paid() -> None:
     md(c.head())
     md(c.paid_hero(S("booking_ref") or "ODN-DEMO00"))
+    text = (S("answer") or {}).get("text")
+    if text:  # ответ агента целиком: после доп. услуги («ранний заезд добавлен») он единственный источник правды
+        md(f'<p class="od-small" style="margin:0 8px 12px">{c.esc(text)}</p>')
     opts = c.options_from_answer(S("answer") or {}, budget())
     if opts:
         o = opts[min(S("chosen") or 0, len(opts) - 1)]
