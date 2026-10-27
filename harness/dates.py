@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-MONTHS = {"январ": 1, "феврал": 2, "март": 3, "апрел": 4, "мая": 5, "май": 5, "июн": 6, "июл": 7, "август": 8,
+MONTHS = {"январ": 1, "феврал": 2, "март": 3, "апрел": 4, "мая": 5, "май": 5, "мае": 5, "июн": 6, "июл": 7, "август": 8,
           "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12}
 _MONTH_RE = "(" + "|".join(MONTHS) + r")[а-я]*"
 WEEKDAYS_RU = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
@@ -47,6 +47,12 @@ def parse_dates(text: str, today: date) -> tuple[date | None, date | None, str |
     if m:
         return _future(date(today.year, _month(m.group(2)), int(m.group(1))), today), None, None
     if "выходн" in low:
+        month = month_from_text(text)
+        if month and month != today.month:                  # «выходные в январе» — первые выходные того месяца
+            first = _future(date(today.year, month, 1), today)
+            fri = first + timedelta(days=(4 - first.weekday()) % 7)
+            return fri, fri + timedelta(days=2), (f"«Выходные» понял как первые выходные месяца: "
+                                                 f"пятница {fri:%d.%m} — воскресенье {fri + timedelta(days=2):%d.%m}.")
         fri, sun = next_weekend(today)
         return fri, sun, "«На выходные» понял как пятница — воскресенье, 2 ночи."
     return None, None, None

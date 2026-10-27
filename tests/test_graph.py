@@ -92,7 +92,7 @@ async def test_llm_structured_path() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Сириус", "other_destination": None, "wishes": ["с детьми"], "budget_total": 70000,
              "checkin": "2026-11-02", "checkout": "2026-11-05", "nights": 3, "adults": 2, "with_kids": True,
-             "children_ages": [6], "pets": False, "month": 11}, ensure_ascii=False)))
+             "children_ages": [6], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m", extra_body={"reasoning": {"enabled": False}},
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -305,7 +305,7 @@ async def test_llm_invented_dates_dropped() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Адлер", "other_destination": None, "wishes": ["бюджетно"], "budget_total": 50000,
              "checkin": "2026-10-30", "checkout": "2026-11-06", "nights": 7, "adults": None, "with_kids": False,
-             "children_ages": [], "pets": False, "month": 10}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 10}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -324,7 +324,7 @@ async def test_sochi_without_area_picks_one() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": None, "other_destination": None, "wishes": ["море"], "budget_total": 60000,
              "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
-             "children_ages": [], "pets": False, "month": 11}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
@@ -352,9 +352,23 @@ async def test_llm_area_without_text_support_dropped() -> None:
         return httpx.Response(200, json=_completion(json.dumps(
             {"area": "Адлер", "other_destination": None, "wishes": ["море"], "budget_total": 60000,
              "checkin": "2026-11-06", "checkout": "2026-11-11", "nights": 5, "adults": 2, "with_kids": False,
-             "children_ages": [], "pets": False, "month": 11}, ensure_ascii=False)))
+             "children_ages": [], "pets": False, "min_stars": None, "beach_line": False, "meal": None, "month": 11}, ensure_ascii=False)))
 
     llm = OpenAICompatLLM("http://router/v1", "k", "m",
                           http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     run = await GraphAgent(llm, today=TODAY).run("Хочу в Сочи на море с 6 ноября на 5 ночей, вдвоём", "s-guess")
     assert run.request.destination == "Сочи-центр" and "Район не назвали — подобрал район «Сочи-центр»" in run.answer.text
+
+
+def test_month_forms_and_weekend_in_month() -> None:
+    from harness.dates import has_date_hint, month_from_text
+    assert month_from_text("на 10 дней в мае") == 5 and has_date_hint("в мае")
+    start, end, note = parse_dates("на 2 ночи в выходные в январе", TODAY)
+    assert (start, end) == (date(2027, 1, 1), date(2027, 1, 3)) and "первые выходные" in note
+
+
+def test_rules_budget_with_spaces_and_adults() -> None:
+    from harness.agent_graph import rules_parse
+    u = rules_parse("Центр Сочи до 30 000 ₽, четверо взрослых, 4★ первая линия", TODAY)
+    assert u.budget_total == 30000 and u.adults == 4 and u.min_stars == 4 and u.beach_line
+    assert rules_parse("Адлер до 50 тыс, еду один", TODAY).adults == 1
