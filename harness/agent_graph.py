@@ -673,8 +673,10 @@ class GraphAgent:
         if state.get("changes"):
             lines.append("Изменил: " + "; ".join(state["changes"]) + ".")
         lines += [a.reason for a in req.assumptions]
+        why = self.planner.why(its, req, self.today) if self.planner else {}
         for i, it in enumerate(its, 1):
-            lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None)
+            lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None,
+                              why.get(it.label))
         best = its[0]
         lines += self._replace_note(state)
         lines.append(f"Оформить вариант 1 «{best.hotel.hotel.name}» и дорогу за {rub(best.total_price)}? "

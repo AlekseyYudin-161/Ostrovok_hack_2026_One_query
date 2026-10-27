@@ -166,9 +166,11 @@ class TripPlanner:
         if not outs or not backs:
             out.notes.append("Дорогу на эти даты в демо-расписании не нашёл — показываю только проживание.")
 
+        picks = self._pick_hotels(req, out.hotels, today, kids, meal)
         seen: set[tuple] = set()
         for label in ("balanced", "cheapest", "most_comfortable"):
-            it = self._variant(label, out.hotels, outs, backs, checkin, checkout, adults, kids, req.pets, aid)
+            it = self._variant(label, picks.get(label, out.hotels), outs, backs, checkin, checkout, adults, kids,
+                               req.pets, aid)
             key = (it.hotel.offer_id if it.hotel else None, it.outbound.option_id if it.outbound else None,
                    it.inbound.option_id if it.inbound else None, tuple(t.kind for t in it.transfers))
             if key not in seen:
@@ -176,6 +178,30 @@ class TripPlanner:
                 out.itineraries.append(it)
         explain(out.itineraries)
         return out
+
+    def _pick_hotels(self, req: TripRequest, hotels: list[HotelOffer], today: date, kids: list[int],
+                     meal: str | None) -> dict[str, list[HotelOffer]]:
+        """M5: отель каждого варианта — скоринг ML по приоритетам (synth.scoring); без него — прежние правила."""
+        try:
+            from synth.scoring import ScoreContext, pick_variants
+        except ImportError:
+            return {}
+        ctx = ScoreContext(today=today, checkin=req.checkin, children_ages=kids, pets=req.pets,
+                           wishes=list(req.preferences), meal_required=meal)
+        return {label: [s.offer] for label, s in pick_variants(self.cat, hotels, ctx).items()}
+
+    def why(self, its: list[Itinerary], req: TripRequest, today: date) -> dict[str, list[str]]:
+        """M5 explain: почему выбран отель варианта — плюсы и минусы отеля, которых нет в tradeoffs."""
+        try:
+            from synth.scoring import ScoreContext, score_hotels
+        except ImportError:
+            return {}
+        kids = req.children_ages or ([7] if "с детьми" in req.preferences else [])
+        ctx = ScoreContext(today=today, checkin=req.checkin, children_ages=kids, pets=req.pets,
+                           wishes=list(req.preferences), meal_required=constraint(req, "meal"))
+        scored = {s.offer.offer_id: s for s in score_hotels(self.cat, [it.hotel for it in its if it.hotel], ctx)}
+        return {it.label: scored[it.hotel.offer_id].why_extra() for it in its
+                if it.hotel and it.hotel.offer_id in scored}
 
     def rank_areas(self, req: TripRequest, today: date, limit: int = 3) -> list[DestinationOption]:
         """L8 inspire: районы на месяц поездки по пожеланиям — инструмент ML RankAreas (погода, дорога, оценка цены)."""
@@ -433,11 +459,13 @@ def explain(its: list[Itinerary]) -> None:
         it.tradeoffs = t
 
 
-def describe(it: Itinerary, n: int, stars: int | None = None) -> list[str]:
-    """Строки варианта для ответа пользователю: что, когда, сколько и какие риски."""
+def describe(it: Itinerary, n: int, stars: int | None = None, why: list[str] | None = None) -> list[str]:
+    """Строки варианта для ответа пользователю: что, когда, сколько, почему (M5) и какие риски."""
     h = it.hotel
     rating = (f", {stars}★" if stars else "") + (f", рейтинг {h.hotel.rating}" if h and h.hotel.rating else "")
     lines = [f"{n}) {LABEL_RU[it.label]}: «{h.hotel.name}»{rating} — {_rub(h.price_total)} за проживание."]
+    if why:
+        lines.append("   Почему: " + "; ".join(why) + ".")
     road = 0.0
     for t, word in ((it.outbound, "Туда"), (it.inbound, "Обратно")):
         if t:
