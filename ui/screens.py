@@ -73,7 +73,8 @@ def run_agent(text: str, patch: dict | None = None) -> None:
     elif mode == "purchased":
         go("paid")
     elif mode == "confirm_action":
-        go("cart")
+        # покупка поездки — корзина; доп. услуга без вариантов (addon_mock) — простой экран «да/нет»
+        go("cart" if c.options_from_answer(ans, budget()) else "confirm")
     elif ans.get("changes"):
         go("diff")
     elif ans.get("destinations") and not S("chosen_area"):
@@ -190,6 +191,8 @@ def results() -> None:
     md(c.query_card(S("query") or demo.DEMO_QUERY))
     opts = c.options_from_answer(ans, budget())
     md(f'<p class="od-small" style="margin-left:8px">✅ {c.esc(ans.get("text") or "Готово")}</p>')
+    if not opts:  # ответ без вариантов (например, после отказа): только текст, чат внизу остаётся
+        return
     params_panel()
     other = [d for d in ans.get("destinations", []) if d["name"] != S("chosen_area")]
     if other:
@@ -269,6 +272,21 @@ def cart() -> None:
             go("results")
 
 
+# ---------- 6а. подтверждение без вариантов (доп. услуга после брони) ----------
+def confirm() -> None:
+    """confirm_action без itineraries/candidates: показываем текст агента и кнопки «Да»/«Нет»."""
+    md(c.head())
+    ans = S("answer") or {}
+    md(c.confirm_card(ans.get("text") or "Подтвердите действие", (ans.get("pending_action") or {}).get("tool")))
+    left, right, _ = st.columns([1, 1, 3])
+    with left, st.container(key="main-confirm-yes"):
+        if st.button("Да", key="confirm-yes", use_container_width=True):
+            submit("да")
+    with right:
+        if st.button("Нет", key="confirm-no", use_container_width=True):
+            submit("нет")
+
+
 # ---------- 7. оплачено ----------
 def paid() -> None:
     md(c.head())
@@ -299,5 +317,5 @@ def none() -> None:
                     submit(r.get("title", "Изменить условия"), r.get("patch"))  # patch уходит агенту как есть
 
 
-SCREENS = {"start": start, "clarify": clarify, "areas": areas, "results": results, "diff": diff, "cart": cart, "paid": paid, "none": none}
-CHAT_SCREENS = {"start", "clarify", "areas", "results", "diff", "none"}
+SCREENS = {"start": start, "clarify": clarify, "areas": areas, "results": results, "diff": diff, "cart": cart, "confirm": confirm, "paid": paid, "none": none}
+CHAT_SCREENS = {"start", "clarify", "areas", "results", "diff", "none", "confirm"}

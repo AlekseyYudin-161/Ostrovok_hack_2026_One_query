@@ -81,10 +81,14 @@ RELAX = [  # ТОЛЬКО для демо-экрана: настоящие ва�
 
 ANSWER_NONE["plan"]["relax"] = RELAX
 
+ANSWER_ADDON = {"mode": "confirm_action", "text": "Ранний заезд в «Белый парус» с 10:00 — 2 500 ₽ (демо). Добавить к брони? Ответьте «да» или «нет».",
+                "candidates": [], "itineraries": [], "destinations": [], "assumptions": [], "changes": [], "questions": [], "violations": [],
+                "pending_action": {"tool": "addon_mock"}}
+
 DEMO_STATES = {
     "start": {}, "working": {"events": [{"type": "plan", "node": "planner"}, {"type": "node_start", "node": "understand"}, {"type": "tool_call", "node": "search"}]},
     "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
     "diff": {"answer": ANSWER_CHANGED, "prev_answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
     "cart": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
-    "none": {"answer": ANSWER_NONE},
+    "none": {"answer": ANSWER_NONE}, "confirm": {"answer": ANSWER_ADDON},
 }

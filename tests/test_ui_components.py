@@ -60,3 +60,12 @@ def test_no_italian_landmarks_in_photos() -> None:
     from ui.theme import ASSETS
     names = {p.stem for p in ASSETS.glob("*.jpg")}
     assert not names & {"city", "colorful-coast", "white-town"}  # Флоренция, Чинкве-Терре, Амальфи
+
+
+def test_confirm_card_without_options():
+    from ui import components as c
+
+    html = c.confirm_card("Ранний заезд — 2 500 ₽.\nДобавить?", "addon_mock")
+    assert "Ранний заезд" in html and "Добавить?" in html
+    assert "\n\n" not in html
+    assert c.options_from_answer({"mode": "confirm_action", "candidates": [], "itineraries": []}) == []

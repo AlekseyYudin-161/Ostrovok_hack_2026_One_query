@@ -9,7 +9,7 @@ make ui-api                  # через FastAPI (в соседнем окне 
 uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 ```
 Любой экран открывается с демо-данными без агента: `http://localhost:8501/?screen=areas`
-(`start`, `working`, `clarify`, `areas`, `results`, `diff`, `cart`, `paid`, `none`).
+(`start`, `working`, `clarify`, `areas`, `results`, `diff`, `cart`, `confirm`, `paid`, `none`).
 
 ## Структура
 | Файл | Что внутри |
@@ -32,6 +32,7 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 | 5 | Результаты | `mode = plan` | `itineraries` (иначе `candidates`): `label`, `total_price`, `tradeoffs`, `checks`, `hotel` |
 | 6 | Было → стало | в ответе непустой `changes` | `AgentAnswer.changes`, прошлый ответ хранится в `session_state.prev_answer` |
 | 7 | Корзина | выбран вариант, или `mode = confirm_action` | `Itinerary`: `outbound`, `inbound`, `transfers`, `hotel`, `checks` |
+| 7а | Подтверждение без вариантов | `mode = confirm_action`, `itineraries` и `candidates` пусты (например, `pending_action.tool = "addon_mock"`) | `text` агента; кнопки «Да» / «Нет» отправляют «да» / «нет» |
 | 8 | Оформлено | событие `purchase` | `booking_ref` |
 | 9 | Нет решения | `mode = no_solution` | `AgentAnswer.violations` |
 

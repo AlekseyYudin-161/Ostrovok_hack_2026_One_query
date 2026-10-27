@@ -239,6 +239,14 @@ def checks_list(checks: list[dict]) -> str:
     return "".join(out)
 
 
+def confirm_card(text: str, tool: str | None = None) -> str:
+    """Карточка подтверждения без вариантов поездки: текст агента (с переносами) и подсказка про «Да/Нет»."""
+    body = "<br>".join(esc(line) for line in (text or "").splitlines() if line.strip())
+    return _h(f'<div class="od-glass" style="padding:26px 28px;margin:8px 0 16px"><div style="display:flex;justify-content:space-between;'
+              f'align-items:center"><div class="od-h3" style="font-size:24px">Нужно ваше подтверждение</div>'
+              f'{chip("Ждёт ответа", "blue")}</div><p class="od-small" style="margin:14px 0 0;font-size:15px;line-height:1.5">{body}</p></div>')
+
+
 def cart_summary(items: list[tuple[str, float]], total: float, budget: float | None = None) -> str:
     rows = "".join(row(k, rub(v)) for k, v in items)
     left = ""

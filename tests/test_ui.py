@@ -37,3 +37,11 @@ def test_every_demo_screen_renders() -> None:
         at.query_params["screen"] = name
         at.run()
         assert not at.exception, name
+
+
+def test_confirm_screen_has_yes_no():
+    at = AppTest.from_file("ui/app.py", default_timeout=30)
+    at.query_params["screen"] = "confirm"
+    at.run()
+    assert not at.exception
+    assert [b.label for b in at.button] == ["Да", "Нет"]
