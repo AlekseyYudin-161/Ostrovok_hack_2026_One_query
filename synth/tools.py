@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field, model_validator
 from harness.contracts import ToolResult, Trust
 from synth.pricing import Catalog
 from synth.refdata import CATALOG_FROM, CATALOG_TO
+from synth.scoring import door_to_door_hours
 
 SideEffect = Literal["none", "reversible", "irreversible"]
 Meal = Literal["none", "breakfast", "half_board", "full_board", "all_inclusive"]
@@ -224,8 +225,13 @@ class RankAreasArgs(BaseModel):
 class RankAreas(_CatalogTool):
     """Районы на месяц: погода, дорога, оценка стоимости поездки целиком; по соответствию пожеланиям.
 
-    Простой прозрачный скоринг (не M5): +2 за каждое совпадение пожелания с best_for, +1 если сезон
-    подходит (море — купальный, горы — лыжный), +1 «с детьми» при детях, −3 если дороже бюджета.
+    Балл = целые очки за пожелания + дробная добавка (< 1) за дорогу и цену:
+      +2 за каждое пожелание из best_for района, +1 если сезон подходит (море — купальный, горы — лыжный),
+      +1 «с детьми» при детях, −3 если оценка поездки выше бюджета;
+      + 0.9 × (w_t · t_min/t + w_p · p_min/p), t — часы от двери до двери (самолёт или поезд + трансфер),
+        p — оценка поездки; w_t = 0.6 (0.7 с детьми, 0.3 при «бюджетно»), w_p = 1 − w_t.
+    Целые очки не меняются, поэтому порог «не хуже лучшего на 1» у агента работает как раньше; при равных
+    очках выигрывает район ближе и дешевле, а не просто дешевле.
     """
 
     name = "rank_areas"
@@ -237,33 +243,46 @@ class RankAreas(_CatalogTool):
             raise ToolError("unknown_entity", f"нет сообщения с городом: {a.origin_city}",
                             {"known": list(self.cat.origins)})
         wishes = [w.lower() for w in a.wishes]
+        options = self.cat.destination_options(a.month, city, a.adults, a.children_ages, a.nights)
+        hours = door_to_door_hours(self.cat, city, a.month, a.adults, a.children_ages)
+        known_h = [h for h in hours.values() if h]
+        t_min = min(known_h) if known_h else None
+        p_min = min((d.est_total_price for d in options if d.est_total_price), default=None)
+        w_t = .3 if "бюджетно" in wishes else (.7 if a.children_ages else .6)
         scored = []
-        for d in self.cat.destination_options(a.month, city, a.adults, a.children_ages, a.nights):
+        for d in options:
             cl = self.cat.climate_for(d.destination_id, a.month)
-            score, reasons = 0.0, []
+            points, reasons = 0.0, []
             for w in (w for w in wishes if w in d.best_for):
-                score += 2
+                points += 2
                 reasons.append(f"подходит: {w}")
                 flag = WISH_TO_FLAG.get(w)
                 if flag and getattr(cl, flag):
-                    score += 1
+                    points += 1
                     reasons.append("купальный сезон" if flag == "swim_ok" else "лыжный сезон открыт")
                 elif flag:
                     reasons.append("не купальный сезон" if flag == "swim_ok" else "лыжный сезон закрыт")
             if a.children_ages and "с детьми" in d.best_for and "с детьми" not in wishes:
-                score += 1
+                points += 1
                 reasons.append("подходит для детей")
+            h = hours.get(d.destination_id)
+            if h is not None:
+                reasons.append(f"дорога ≈{h:g} ч" + (" — ближе всех" if h == t_min else ""))
             over = a.max_total is not None and d.est_total_price is not None and d.est_total_price > a.max_total
             if over:
-                score -= 3
+                points -= 3
                 reasons.append(f"оценка {d.est_total_price:.0f} ₽ выше бюджета")
-            item = d.model_copy(update={"score": score, "why": reasons + d.why})
-            scored.append((score, -(d.est_total_price or 0), item, over))
-        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            u_t = (t_min / h) if (h and t_min) else .5
+            u_p = (p_min / d.est_total_price) if (p_min and d.est_total_price) else .5
+            score = round(points + .9 * (w_t * u_t + (1 - w_t) * u_p), 2)
+            item = d.model_copy(update={"score": score, "why": reasons + d.why,
+                                        "travel_hours": h if h is not None else d.travel_hours})
+            scored.append((score, item, over))
+        scored.sort(key=lambda x: (-x[0], x[1].travel_hours or 99, x[1].destination_id))
         return [item.model_dump(mode="json") | {"facts": {"over_budget": over,
                                                           "poi": [p.name for p in self.cat.poi_for(item.destination_id,
                                                                                                     a.month)][:3]}}
-                for _, _, item, over in scored[:a.limit]]
+                for _, item, over in scored[:a.limit]]
 
 
 TOOL_CLASSES = (SearchHotels, SearchTransport, SearchTransfers, RankAreas)
