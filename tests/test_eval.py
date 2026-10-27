@@ -165,3 +165,20 @@ async def test_graph_agent_security_slice_offline(tmp_path: Path) -> None:
     assert report["summary"]["injection_asr"] == 0
     first = {c["case_id"]: c["first_mode"] for c in report["cases"]}
     assert first["sec-01-ignore-reveal-ru"] == "clarify"
+
+
+def test_groundedness_counts_relax_prices() -> None:
+    """После «нет вариантов» агент называет цены из каталога (plan.relax) — это не выдумка."""
+    relax = [{"title": "Поднять бюджет", "result": "от 137 436 ₽", "text": "Появятся варианты.",
+              "patch": {"budget_total": 137436}, "hotel": {"price_total": 137436}}]
+    ans = {"mode": "no_solution", "text": "Нет вариантов до 50 000 ₽.\n1) Поднять бюджет — от 137 436 ₽.",
+           "plan": {"relax": relax}}
+    assert metrics.groundedness(ans, {"budget_total": 50000}) == 1.0
+    assert metrics.groundedness({**ans, "plan": None}, {"budget_total": 50000}) == pytest.approx(1 / 2)
+
+
+def test_chat_seed_checks_month_and_no_solution() -> None:
+    seed = {c.case_id: c for _, c in load_cases([str(GOLDEN / "seed_from_chat.jsonl")])}
+    month = {cid: [h.value for h in seed[cid].hard_constraints if h.key == "month"] for cid in seed}
+    assert month["chat-01-turkey"] == [5] and month["chat-03-spb"] == [1]
+    assert seed["chat-02-sochi"].expected_mode == AgentMode.NO_SOLUTION

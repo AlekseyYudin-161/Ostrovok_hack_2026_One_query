@@ -186,6 +186,12 @@ def known_amounts(answer: dict, request: dict) -> set[int]:
         vals += _rub_values(str(a.get("reason", "")))
     for change in answer.get("changes") or []:               # «Бюджет: 50 000 ₽ → 35 000 ₽» — оба значения законны
         vals += _rub_values(change)
+    for r in (answer.get("plan") or {}).get("relax") or []:  # «нет вариантов» → что поменять, цены из каталога (L7)
+        if (r.get("hotel") or {}).get("price_total") is not None:
+            vals.append(r["hotel"]["price_total"])
+        vals += _rub_values(f"{r.get('result', '')} {r.get('text', '')}")
+        if (r.get("patch") or {}).get("budget_total"):
+            vals.append(r["patch"]["budget_total"])
     return {round(v) for v in vals}
 
 
