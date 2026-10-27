@@ -25,9 +25,9 @@ MEALS = {"none": "без питания", "breakfast": "завтрак", "half_b
          "full_board": "полный пансион", "all_inclusive": "всё включено"}
 CANCEL = {"free_until_3d": "бесплатная отмена за 3 дня", "non_refundable": "без возврата"}
 # какое фото к какому месту; остальное — по хэшу названия
-AREA_PHOTO = {"дагомыс": "sea-cliff", "адлер": "resort", "сочи": "city", "центр": "city",
+AREA_PHOTO = {"дагомыс": "sea-cliff", "адлер": "resort", "сочи": "sunset-rock", "центр": "sunset-rock",
               "красная поляна": "meadow", "горы": "mountains"}
-HOTEL_PHOTOS = ["white-town", "colorful-coast", "sunset-rock", "sea-cliff", "resort"]
+HOTEL_PHOTOS = ["sea-cliff", "resort", "sunset-rock"]
 
 
 def _h(s: str) -> str:
@@ -40,7 +40,7 @@ def esc(x: Any) -> str:
 
 
 def rub(n: float | int | None) -> str:
-    return "—" if n is None else f"{round(n):,}".replace(",", " ") + " ₽"
+    return "—" if n is None else f"{round(n):,}".replace(",", " ") + " ₽"
 
 
 MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
@@ -113,8 +113,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
         hotel = offer.get("hotel") or {}
         opts.append({
             "name": hotel.get("name", "Отель"), "area": hotel.get("city") or "", "rating": hotel.get("rating"),
-            "price": it.get("total_price") or offer.get("price_total"), "hotel_price": offer.get("price_total"),
-            "label": it.get("label", "custom"),
+            "price": it.get("total_price") or offer.get("price_total"), "label": it.get("label", "custom"),
             "meal": MEALS.get(offer.get("meal", "none"), ""),
             "cancel": "бесплатная отмена" if offer.get("refundable", True) else "без возврата",
             "tradeoffs": [t.get("note", "") for t in it.get("tradeoffs", [])],
@@ -130,8 +129,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
                 "tradeoffs": [], "checks": [], "raw": c,
             })
     for o in opts:
-        stay = o.get("hotel_price") or o["price"]          # бюджет пользователя — только проживание (ADR-018)
-        o["over"] = bool(budget and stay and stay > budget)
+        o["over"] = bool(budget and o["price"] and o["price"] > budget)
         o["photo"] = photo_for(o["name"])
     return opts
 
@@ -141,8 +139,7 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
     sub = " · ".join(x for x in [o["area"], f'{o["rating"]}' if o.get("rating") else "", o.get("meal", ""), o.get("cancel", "")] if x)
     warn = ""
     if o.get("over") and budget:
-        stay = o.get("hotel_price") or o["price"]
-        warn = f'<div style="margin-top:8px">{chip(f"проживание дороже бюджета на {rub(stay - budget)}", "red")}</div>'
+        warn = f'<div style="margin-top:8px">{chip(f"дороже бюджета на {rub(o["price"] - budget)}", "red")}</div>'
     trade = ""
     if o.get("tradeoffs"):
         li = "".join(f"<li>{esc(t)}</li>" for t in o["tradeoffs"])
@@ -176,8 +173,7 @@ def trip_card(t: dict) -> str:
     """Карточка «готового путешествия» на главной."""
     return _h(f'''<div class="od-glass tight">{cover(t["photo"], t["title"], "демо")}
 <div style="padding:14px 10px 6px">{chips(t["tags"])}<div class="od-h3">{esc(t["title"])}</div>
-<p class="od-muted" style="font-size:14px;margin:4px 0 8px">{esc(t["place"])}</p>
-<div class="od-small">от</div><div class="od-price">{rub(t["price"])}</div></div></div>''')
+<p class="od-muted" style="font-size:14px;margin:4px 0 8px">{esc(t["place"])}</p></div></div>''')
 
 
 STEP_TITLES = {"plan": "Составил план", "node_start": "Разбираю запрос", "tool_call": "Ищу отели и тарифы",
@@ -212,7 +208,9 @@ def timeline(events: list[dict], finished: bool) -> str:
 
 
 def skeleton() -> str:
-    bar = lambda w: f'<div style="width:{w};height:14px;border-radius:8px;background:#E9E9EE;margin-top:10px"></div>'
+    def bar(w: str) -> str:
+        return f'<div style="width:{w};height:14px;border-radius:8px;background:#E9E9EE;margin-top:10px"></div>'
+
     return _h(f'<div class="od-glass tight"><div style="height:130px;border-radius:18px;background:#E5E5EA"></div><div style="padding:6px 8px 12px">{bar("60%")}{bar("40%")}{bar("80%")}</div></div>')
 
 
@@ -241,15 +239,12 @@ def checks_list(checks: list[dict]) -> str:
     return "".join(out)
 
 
-def cart_summary(items: list[tuple[str, float]], total: float, budget: float | None = None,
-                 hotel: float | None = None) -> str:
-    """hotel — цена проживания: с бюджетом сравниваем только её (ADR-018), дорога показана отдельно."""
+def cart_summary(items: list[tuple[str, float]], total: float, budget: float | None = None) -> str:
     rows = "".join(row(k, rub(v)) for k, v in items)
     left = ""
     if budget:
-        diff = budget - (hotel if hotel is not None else total)
-        left = (f'<p class="od-small" style="margin:10px 0 0">'
-                f'{"Проживание в рамках бюджета, остаётся " + rub(diff) if diff >= 0 else "Проживание выше бюджета на " + rub(-diff)}</p>')
+        diff = budget - total
+        left = f'<p class="od-small" style="margin:10px 0 0">{"В рамках бюджета, остаётся " + rub(diff) if diff >= 0 else "Выше бюджета на " + rub(-diff)}</p>'
     return _h(f'''<div class="od-glass"><div class="od-h3" style="margin-bottom:12px">Итого</div>
 <div style="display:flex;flex-direction:column;gap:10px">{rows}</div>
 <div style="height:1px;background:#E5E5EA;margin:14px 0"></div>{row("К оплате", rub(total), True)}{left}
@@ -264,14 +259,23 @@ def diff_changes(changes: list[str]) -> str:
 
 
 def paid_hero(ref: str) -> str:
-    return _h(f'''<div style="text-align:center;padding:24px 0 8px"><div style="display:inline-flex">'''+hero_icon(HERO_OK, "#1E4A12")+f'''</div>
+    icon = hero_icon(HERO_OK, "#1E4A12")
+    return _h(f'''<div style="text-align:center;padding:24px 0 8px"><div style="display:inline-flex">{icon}</div>
 <h1 class="od-h1" style="font-size:40px;margin:14px 0 8px">Поездка оформлена</h1><p class="od-muted" style="font-size:17px">Это демо: бронь не создавалась и деньги не списывались.</p>
 <span style="display:inline-block;margin-top:14px;background:#fff;border:1px solid #E5E5EA;border-radius:16px;padding:12px 22px;font-size:15px;color:#6C6C70">Номер брони <b style="color:#14161F;letter-spacing:1px;margin-left:6px">{esc(ref)}</b></span></div>''')
 
 
 def no_solution_hero(violations: list[str]) -> str:
-    items = bullets([("#D93025", esc(v)) for v in violations]) or ""
-    return _h(f'''<div style="text-align:center;padding:24px 0 8px"><div style="display:inline-flex">'''+hero_icon(HERO_NONE, "#86868B")+f'''</div>
+    items = bullets([("#D93025", esc(v)) for v in violations])
+    icon = hero_icon(HERO_NONE, "#86868B")
+    return _h(f'''<div style="text-align:center;padding:24px 0 8px"><div style="display:inline-flex">{icon}</div>
 <h1 class="od-h1" style="font-size:40px;margin:14px 0 8px">Под все условия вариантов нет</h1>
-<p class="od-muted" style="font-size:17px">Я проверил районы и отели. Вместе эти условия не сходятся, но вот что можно поменять.</p></div>
+<p class="od-muted" style="font-size:17px">Я проверил районы и отели, и вместе эти условия не сходятся.</p></div>
 <div class="od-glass" style="margin-top:16px"><div class="od-h3" style="font-size:17px;margin-bottom:12px">Что не сошлось</div>{items}</div>''')
+
+
+def relax_card(r: dict) -> str:
+    """Предложение агента из answer.plan.relax: {title, text, result, patch, hotel?}."""
+    hotel = f'<div class="od-small" style="margin-top:6px">{esc(r["hotel"])}</div>' if isinstance(r.get("hotel"), str) else ""
+    return _h(f'''<div class="od-glass" style="min-height:190px"><div class="od-h3">{esc(r.get("title", ""))}</div>
+<p class="od-muted" style="font-size:14px;margin:8px 0 12px">{esc(r.get("text", ""))}</p><b>{esc(r.get("result", ""))}</b>{hotel}</div>''')

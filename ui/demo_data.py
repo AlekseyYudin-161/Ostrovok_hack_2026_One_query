@@ -11,13 +11,13 @@ EXAMPLES = ["Сочи на неделю в сентябре, до 50 000 ₽", "
             "Горы и лыжи на выходные", "Тихий отдых у моря"]
 
 TRIPS = [
-    {"title": "Море и тишина", "place": "Дагомыс · 7 ночей", "price": 38400, "tags": ["У моря", "Тихо"], "photo": "sea-cliff",
+    {"title": "Море и тишина", "place": "Дагомыс · 7 ночей", "tags": ["У моря", "Тихо"], "photo": "sea-cliff",
      "query": "Тихий отдых у моря в Дагомысе на 7 ночей"},
-    {"title": "Горы и лыжи", "place": "Красная Поляна · 5 ночей", "price": 44900, "tags": ["Горы", "Активный отдых"], "photo": "mountains",
+    {"title": "Горы и лыжи", "place": "Красная Поляна · 5 ночей", "tags": ["Горы", "Активный отдых"], "photo": "mountains",
      "query": "Красная Поляна, 5 ночей, горы и активный отдых"},
-    {"title": "Семейный отпуск", "place": "Адлер · 10 ночей", "price": 62000, "tags": ["С детьми", "Всё включено"], "photo": "resort",
+    {"title": "Семейный отпуск", "place": "Адлер · 10 ночей", "tags": ["С детьми", "Всё включено"], "photo": "resort",
      "query": "Адлер на 10 ночей с ребёнком, всё включено"},
-    {"title": "Выходные в центре", "place": "Сочи-центр · 3 ночи", "price": 21500, "tags": ["Город", "Выходные"], "photo": "city",
+    {"title": "Выходные в центре", "place": "Сочи-центр · 3 ночи", "tags": ["Город", "Выходные"], "photo": "sunset-rock",
      "query": "Выходные в центре Сочи, 3 ночи"},
 ]
 
@@ -70,18 +70,21 @@ ANSWER_CLARIFY = {"mode": "clarify", "text": "Почти всё понятно. 
 QUICK_REPLIES = {"Когда поедете?": ["Сентябрь", "Октябрь", "Ноябрь"], "Сколько человек?": ["1", "2", "С детьми"]}
 
 ANSWER_NONE = {"mode": "no_solution", "text": "", "candidates": [], "itineraries": [], "destinations": [], "assumptions": [], "changes": [], "questions": [],
-               "violations": ["4★ на первой линии с завтраком в сентябре стоят от 61 300 ₽, вы готовы потратить 50 000 ₽",
+               "plan": {"relax": None}, "violations": ["4★ на первой линии с завтраком в сентябре стоят от 61 300 ₽, вы готовы потратить 50 000 ₽",
                               "С бюджетом 50 000 ₽ на первой линии остаются только 3★ без завтрака"]}
-RELAX = [
+RELAX = [  # ТОЛЬКО для демо-экрана: настоящие варианты приходят в answer.plan.relax
+
     {"title": "Поднять бюджет", "text": "До 61 300 ₽. Остаются 4★, первая линия и завтрак.", "result": "+ 11 300 ₽", "patch": {"budget_total": 61300}, "green": True},
     {"title": "Не требовать первую линию", "text": "Отель в 5–10 минутах от моря, остальное без изменений.", "result": "от 44 100 ₽", "patch": {"preferences": []}},
     {"title": "Сдвинуть даты", "text": "Уехать на неделю позже, когда цены ниже.", "result": "от 46 200 ₽", "patch": {"checkin": "2026-09-19", "checkout": "2026-09-26"}},
 ]
 
+ANSWER_NONE["plan"]["relax"] = RELAX
+
 DEMO_STATES = {
     "start": {}, "working": {"events": [{"type": "plan", "node": "planner"}, {"type": "node_start", "node": "understand"}, {"type": "tool_call", "node": "search"}]},
-    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "chosen_area": "dagomys"},
-    "diff": {"answer": ANSWER_CHANGED, "prev_answer": ANSWER_PLAN, "chosen_area": "dagomys"},
-    "cart": {"answer": ANSWER_PLAN, "chosen_area": "dagomys", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
+    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
+    "diff": {"answer": ANSWER_CHANGED, "prev_answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
+    "cart": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
     "none": {"answer": ANSWER_NONE},
 }

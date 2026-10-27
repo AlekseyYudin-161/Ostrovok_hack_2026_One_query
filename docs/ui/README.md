@@ -19,7 +19,7 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 | `ui/components.py` | HTML-карточки, чистые функции без Streamlit (их тестируем обычным pytest) |
 | `ui/theme.py` | цвета, весь CSS, загрузка фото |
 | `ui/demo_data.py` | демо-данные в форме `harness/contracts.py` |
-| `ui/assets/photos/` | фото для карточек (демо, не из Сочи) |
+| `ui/assets/photos/` | фото для карточек (Freepik, см. раздел «Фото») |
 | `.streamlit/config.toml` | тема Streamlit (цвета, шрифт) |
 
 ## Экраны и контракт
@@ -29,10 +29,10 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 | 2 | Агент работает | идёт SSE-поток | события `AgentEvent`: `plan`, `node_start`, `tool_call`, `tool_result`, `verify`, `replan`, `answer` |
 | 3 | Уточнение | `mode = clarify` | `AgentAnswer.questions`, `assumptions` |
 | 4 | Выбор района | `mode = plan` и есть `destinations` | `DestinationOption`: `best_for`, `why`, `air_temp_c`, `sea_temp_c`, `travel_hours`, `direct`, `est_total_price`, `score` |
-| 5 | Результаты | `mode = plan`, или `confirm_action` с `itineraries` (агент собрал варианты и ждёт «да») | `itineraries` (иначе `candidates`): `label`, `total_price`, `tradeoffs`, `checks`, `hotel`; «дороже бюджета» — по цене проживания (ADR-018) |
+| 5 | Результаты | `mode = plan` | `itineraries` (иначе `candidates`): `label`, `total_price`, `tradeoffs`, `checks`, `hotel` |
 | 6 | Было → стало | в ответе непустой `changes` | `AgentAnswer.changes`, прошлый ответ хранится в `session_state.prev_answer` |
-| 7 | Корзина | выбран вариант | `Itinerary`: `outbound`, `inbound`, `transfers`, `hotel`, `checks` |
-| 8 | Оформлено | «Подтвердить и оплатить» отправляет агенту «да» → событие `purchase` | `booking_ref` |
+| 7 | Корзина | выбран вариант, или `mode = confirm_action` | `Itinerary`: `outbound`, `inbound`, `transfers`, `hotel`, `checks` |
+| 8 | Оформлено | событие `purchase` | `booking_ref` |
 | 9 | Нет решения | `mode = no_solution` | `AgentAnswer.violations` |
 
 Правка параметров на экране «Результаты» уходит агенту как `patch` (`budget_total`, `nights`, `guests_adults`), как в `Agent.stream(..., patch)`.
@@ -47,12 +47,41 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 Лист `docs/ui/screens/10-states.png` показывает каждый компонент в состояниях Default, Hover, Pressed, Focus, Disabled, Loading, Error: кнопки (основная, вторичная, текстовая, иконка), чипы и допущения агента, табы (сегменты и линия), поля ввода, выпадающий список, счётчик, флажок, радиокнопка, переключатель, ползунок, поле запроса, карточки (в том числе выбранная и рекомендованная), уведомления, пустые состояния и шаги.
 В коде состояния заданы в `ui/theme.py`: `:hover`, `:active`, `:focus-visible` (кольцо 4 px), `:disabled`, `aria-invalid` для ошибок. Главная кнопка экрана получает контейнер с ключом `main-…` и становится заливкой.
 
+## Как интерфейс говорит с агентом
+| Действие | Что уходит агенту |
+|---|---|
+| Ввод в поле запроса | текст как есть |
+| «Выбрать район» или чип «Другие районы» | `patch {"destination": "<name из карточки>"}`, агент пересобирает поездку |
+| «Пересчитать» в панели параметров | `patch` с изменёнными полями (`budget_total`, `nights`, `guests_adults`) |
+| «Подтвердить и оплатить» | текст «да, вариант N» (N с единицы), номер брони приходит событием `purchase` |
+| «Применить» на экране «Нет решения» | `patch` из `answer.plan.relax[i]` как есть |
+
+Блок «Что можно поменять» показывается только если в ответе есть `plan.relax` (`[{title, text, result, patch, hotel?}]`). Если там пусто, блока нет.
+
+## Данные на экранах
+Все цифры, названия и расписания в карточках приходят от агента (`itineraries`, `destinations`, `candidates`). На главной у карточек
+«Готовые путешествия» цен нет: показаны только тип поездки и район, нажатие отправляет агенту готовый запрос.
+Числа в `ui/demo_data.py` (цены, расписания, `RELAX`) выдуманы и нужны только для просмотра экранов через `?screen=…`;
+в обычной работе они не показываются.
+
+## Фото
+В `ui/assets/photos/` лежат 5 фото, все из бесплатного стока **Freepik** (freepik.com), оригиналы сжаты до 1100 px по длинной стороне.
+Лицензия: Freepik Free License, использование разрешено при указании Freepik и автора. Ссылки на страницы с авторами нужно добавить
+в таблицу ниже (в проекте их нет).
+
+| Файл в проекте | Оригинал на Freepik | Где используется |
+|---|---|---|
+| `sea-cliff.jpg` | `beautiful-vertical-view-rocky-seashore-blue-calm-sea` | Дагомыс |
+| `resort.jpg` | `beautiful-shot-tropical-island-surrounded-by-clear-water-sunny-day` | Адлер |
+| `sunset-rock.jpg` | `scenic-view-sea-clear-sky` | Сочи-центр |
+| `meadow.jpg` | `spring-landscape-view-flowered-meadow-with-mountains-lit-by-sunset-foreground` | Красная Поляна |
+| `mountains.jpg` | `vertical-shot-river-surrounded-by-mountains-meadows-scotland` | карточка «Горы» |
+
+Это иллюстрации, а не настоящие виды Сочи. Узнаваемые кадры других стран (Флоренция, Чинкве-Терре, Амальфи) из проекта убраны.
+Подбор фото по месту сделан в `ui/components.py` (`AREA_PHOTO`, `HOTEL_PHOTOS`).
+
 ## Что пока не подключено
-- Кнопка «Подтвердить и оплатить» отправляет агенту «да», номер брони приходит из события `purchase`. Агент пока оформляет рекомендованный вариант (первый); выбор другого варианта агенту не передаётся. На демо-экранах без агента номер создаётся локально.
-- На вопрос «посмотреть похожий район?» (запрос вне Большого Сочи) есть кнопки «Да / Нет».
-- Быстрые ответы на экране уточнения (`QUICK_REPLIES`) заданы в `demo_data.py` для двух вопросов; для остальных остаётся поле ввода внизу.
-- Кнопка «Выбрать район» только сохраняет выбор в `session_state.chosen_area`; агенту район пока не передаётся.
-- Фото в карточках демонстрационные и подбираются по названию места; для настоящих отелей их надо брать из каталога.
+- Фото в карточках демонстрационные и подбираются по названию места. Для настоящих отелей их надо брать из каталога.
 - Streamlit рисует кнопки отдельно от HTML-карточек, поэтому кнопка стоит сразу под карточкой, а не внутри неё.
 
 ## Макеты

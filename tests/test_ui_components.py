@@ -4,7 +4,7 @@ from ui import demo_data as d
 
 
 def test_rub_uses_nbsp() -> None:
-    assert c.rub(48900) == "48 900 ₽"
+    assert c.rub(48900) == "48 900 ₽"
     assert c.rub(None) == "—"
 
 
@@ -16,17 +16,10 @@ def test_html_has_no_blank_lines() -> None:
 
 
 def test_options_from_itineraries_and_budget() -> None:
-    # бюджет — только проживание (ADR-018): отели 31 500 / 22 200 / 43 900 ₽ против 40 000 ₽
-    opts = c.options_from_answer(d.ANSWER_PLAN, budget=40000)
+    opts = c.options_from_answer(d.ANSWER_PLAN, budget=50000)
     assert [o["name"] for o in opts] == ["Морской бриз", "Приморский", "Белый парус"]
     assert [o["over"] for o in opts] == [False, False, True]
-    assert "проживание дороже бюджета на 3 900 ₽" in c.hotel_card(opts[2], budget=40000)
-    assert not any(o["over"] for o in c.options_from_answer(d.ANSWER_PLAN, budget=50000))  # дорога в бюджет не входит
-
-
-def test_cart_summary_compares_hotel_only() -> None:
-    assert "Проживание в рамках бюджета, остаётся 18 500 ₽" in c.cart_summary([("Отель", 31500)], 48900, 50000, hotel=31500)
-    assert "выше бюджета на 10 000 ₽" in c.cart_summary([("Отель", 1)], 60000, 50000)  # без цены отеля — по итогу
+    assert "дороже бюджета на 11 300 ₽" in c.hotel_card(opts[2], budget=50000)
 
 
 def test_options_from_candidates_fallback() -> None:
@@ -52,3 +45,18 @@ def test_theme_buttons_are_blue_only() -> None:
     assert "st-key-green" not in theme.CSS
     for state in (":hover", ":active", ":focus-visible", ":disabled"):
         assert f".stButton > button{state}" in theme.CSS
+
+
+def test_trip_card_has_no_invented_price() -> None:
+    assert "₽" not in c.trip_card(d.TRIPS[0])
+
+
+def test_relax_card_renders_agent_fields() -> None:
+    html = c.relax_card({"title": "Поднять бюджет", "text": "До 61 300 ₽", "result": "+ 11 300 ₽", "patch": {"budget_total": 61300}})
+    assert "Поднять бюджет" in html and "+ 11" in html
+
+
+def test_no_italian_landmarks_in_photos() -> None:
+    from ui.theme import ASSETS
+    names = {p.stem for p in ASSETS.glob("*.jpg")}
+    assert not names & {"city", "colorful-coast", "white-town"}  # Флоренция, Чинкве-Терре, Амальфи

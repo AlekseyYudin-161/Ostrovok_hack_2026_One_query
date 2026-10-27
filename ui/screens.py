@@ -59,9 +59,10 @@ def run_agent(text: str, patch: dict | None = None) -> None:
     prev = S("answer")
     res = asyncio.run(_consume(text, patch, ph))
     ans = res["answer"] or {"mode": "no_solution", "text": "Агент не вернул ответ", "violations": []}
-    st.session_state.prev_answer = prev                     # для «было → стало» после правки панелью или текстом
+    st.session_state.prev_answer = prev if patch else None
     st.session_state.answer, st.session_state.request = ans, res["request"] or S("request")
-    st.session_state.chosen = None
+    if (ans.get("mode") or "plan") == "plan":
+        st.session_state.chosen = None
     if res["booking_ref"]:
         st.session_state.booking_ref = res["booking_ref"]
     mode = ans.get("mode")
@@ -71,10 +72,6 @@ def run_agent(text: str, patch: dict | None = None) -> None:
         go("none")
     elif mode == "purchased":
         go("paid")
-    elif ans.get("changes") and prev:
-        go("diff")
-    elif mode == "confirm_action" and ans.get("itineraries"):  # агент собрал варианты и ждёт «да» — сначала показываем их
-        go("results")
     elif mode == "confirm_action":
         go("cart")
     elif ans.get("changes"):
@@ -140,14 +137,6 @@ def clarify() -> None:
     ans = S("answer") or demo.ANSWER_CLARIFY
     md(c.user_bubble(S("query") or "Хочу на море, недорого, на неделю"))
     md(c.agent_bubble(ans.get("text") or "Нужно уточнить пару деталей."))
-    suggested = (ans.get("pending_action") or {}).get("suggested_area")
-    if suggested:                                           # «работаем только по Сочи» + похожий район (ADR-019)
-        cols = st.columns(3)
-        with cols[0].container(key="main-suggest-yes"):
-            if st.button(f"Да, показать {suggested}", key="suggest-yes", use_container_width=True):
-                submit("да")
-        if cols[1].button("Нет", key="suggest-no", use_container_width=True):
-            submit("нет")
     for q in ans.get("questions", []):
         md(f'<div style="font-size:17px;font-weight:600;margin-top:8px">{c.esc(q)}</div>')
         options = demo.QUICK_REPLIES.get(q, [])
@@ -177,8 +166,8 @@ def areas() -> None:
                 md(c.area_card(d, rec=d is best))
                 with st.container(key=f"main-area-{d['destination_id']}" if d is best else f"area-{d['destination_id']}"):
                     if st.button("Выбрать район", key=f"pick-{d['destination_id']}", use_container_width=True):
-                        st.session_state.chosen_area = d["destination_id"]
-                        go("results")
+                        st.session_state.chosen_area = d["name"]
+                        submit(f"Хочу в район {d['name']}", {"destination": d["name"]})
 
 
 # ---------- 4. результаты ----------
@@ -190,9 +179,7 @@ def params_panel() -> None:
         n = cols[1].number_input("Ночей", 1, 30, int(req.get("nights") or 7))
         g = cols[2].number_input("Гостей", 1, 10, int(req.get("guests_adults") or 1))
         if st.button("Пересчитать", type="primary"):
-            shown = {"budget_total": int(req.get("budget_total") or 50000), "nights": int(req.get("nights") or 7),
-                     "guests_adults": int(req.get("guests_adults") or 1)}
-            patch = {k: v for k, v in {"budget_total": b, "nights": n, "guests_adults": g}.items() if v != shown[k]}
+            patch = {k: v for k, v in {"budget_total": b, "nights": n, "guests_adults": g}.items() if v != req.get(k)}
             if patch:
                 submit("Пересчитай с новыми параметрами", patch)
 
@@ -204,6 +191,14 @@ def results() -> None:
     opts = c.options_from_answer(ans, budget())
     md(f'<p class="od-small" style="margin-left:8px">✅ {c.esc(ans.get("text") or "Готово")}</p>')
     params_panel()
+    other = [d for d in ans.get("destinations", []) if d["name"] != S("chosen_area")]
+    if other:
+        md('<p class="od-small" style="margin:4px 0 0 8px">Другие районы</p>')
+        cols = st.columns(min(len(other), 4) + 1)
+        for col, d in zip(cols, other[:4], strict=False):
+            if col.button(d["name"], key=f"alt-{d['destination_id']}"):
+                st.session_state.chosen_area = d["name"]
+                submit(f"Хочу в район {d['name']}", {"destination": d["name"]})
     if not opts:
         md('<div class="od-glass">Вариантов нет. Попробуйте изменить параметры.</div>')
         return
@@ -266,15 +261,10 @@ def cart() -> None:
     with left:
         md(c._h(f'<div class="od-glass" style="padding:26px 28px"><div style="display:flex;justify-content:space-between;align-items:center"><div class="od-h3" style="font-size:24px">Ваша поездка</div>{c.chip("Ждёт подтверждения", "blue")}</div>{"".join(legs)}<div style="margin-top:16px">{c.checks_list(o["checks"])}</div></div>'))
     with right:
-        md(c.cart_summary(items, o["price"], budget(), hotel=o.get("hotel_price")))
+        md(c.cart_summary(items, o["price"], budget()))
         with st.container(key="main-pay"):
-            if st.button("Подтвердить и оплатить", use_container_width=True):
-                if ans.get("mode") == "confirm_action":     # агент ждёт явного «да» — покупку делает только он
-                    submit("да")
-                st.session_state.booking_ref = "ODN-" + uuid.uuid4().hex[:6].upper()  # демо-экраны без агента
-                go("paid")
-        if ans.get("mode") == "confirm_action" and idx:
-            md('<p class="od-small">Демо-оплата агента пока оформляет рекомендованный вариант (первый).</p>')
+            if st.button("Подтвердить и оплатить", key="pay", use_container_width=True):
+                submit(f"да, вариант {idx + 1}")  # агент сам оформляет покупку и присылает номер брони
         if st.button("Вернуться к вариантам", use_container_width=True):
             go("results")
 
@@ -294,16 +284,19 @@ def paid() -> None:
 # ---------- 8. нет решения ----------
 def none() -> None:
     md(c.head())
-    ans = S("answer") or demo.ANSWER_NONE
+    ans = S("answer") or {}
     md(c.no_solution_hero(ans.get("violations") or ([ans["text"]] if ans.get("text") else [])))
+    relax = (ans.get("plan") or {}).get("relax") or []  # реальные варианты от агента; нет — блок не показываем
+    if not relax:
+        return
     md('<div class="od-h2" style="font-size:24px;margin-top:8px">Что можно поменять</div>')
-    cols = st.columns(len(demo.RELAX))
-    for col, r in zip(cols, demo.RELAX, strict=True):
+    cols = st.columns(len(relax))
+    for i, (col, r) in enumerate(zip(cols, relax, strict=True)):
         with col:
-            md(c._h(f'<div class="od-glass" style="min-height:190px"><div class="od-h3">{r["title"]}</div><p class="od-muted" style="font-size:14px;margin:8px 0 12px">{r["text"]}</p><b>{r["result"]}</b></div>'))
-            with st.container(key=f"main-relax-{r['title']}" if r.get("green") else f"relax-{r['title']}"):
-                if st.button("Применить", key=f"relax-btn-{r['title']}", use_container_width=True):
-                    submit("Подбери с изменёнными условиями: " + r["title"].lower(), r["patch"])
+            md(c.relax_card(r))
+            with st.container(key=f"main-relax-{i}" if i == 0 else f"relax-{i}"):
+                if st.button("Применить", key=f"relax-btn-{i}", use_container_width=True):
+                    submit(r.get("title", "Изменить условия"), r.get("patch"))  # patch уходит агенту как есть
 
 
 SCREENS = {"start": start, "clarify": clarify, "areas": areas, "results": results, "diff": diff, "cart": cart, "paid": paid, "none": none}
