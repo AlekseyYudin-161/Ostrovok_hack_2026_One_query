@@ -38,7 +38,11 @@ html, body, [class*="css"], .stApp {{ font-family:-apple-system,BlinkMacSystemFo
 .stApp {{ background:#F5F5F7; }}
 header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 .block-container {{ max-width:1040px; padding:20px 24px 96px; }}
-[data-testid="stVerticalBlock"] {{ gap:1rem; }}
+[data-testid="stVerticalBlock"] {{ gap:1rem !important; }}
+/* Streamlit гасит нижний отступ markdown отрицательным margin (под последний <p>); у нашего HTML <p> нет,
+   поэтому отступ между блоками «съедался». Обнуляем, и расстояния задаёт только gap. */
+[data-testid="stMarkdown"], [data-testid="stMarkdownContainer"], .stMarkdown {{ margin-bottom:0 !important; }}
+[data-testid="stElementContainer"]:has(> [data-testid="stMarkdown"]) {{ margin-bottom:0 !important; }}
 
 /* карточки */
 .od-glass {{ background:#fff; border:1px solid #E8E8ED; box-shadow:0 1px 2px rgba(20,30,60,.04),0 8px 24px rgba(20,30,60,.04);
@@ -159,17 +163,17 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
 [data-baseweb="tab-highlight"] {{ background:{BLUE}; height:2.5px; }}
 [data-baseweb="tab-border"] {{ display:none; }}
 
-[data-testid="stChatInput"] > div {{ background:#fff; border:2px solid #DCE3F7; border-radius:20px; min-height:60px;
-  box-shadow:0 2px 6px rgba(20,30,60,.06), 0 16px 36px rgba(13,65,210,.12); transition:border-color .15s, box-shadow .15s; }}
-[data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
-/* первый экран: поле поиска стоит под заголовком, а не прижато к низу */
-.st-key-hero-search {{ width:100%; margin:8px 0 0; padding:12px; border-radius:32px;
-  background:linear-gradient(135deg,{BLUE_TINT} 0%,#FFFFFF 100%); border:2px solid {BLUE};
-  box-shadow:0 0 0 6px rgba(13,65,210,.10), 0 20px 48px rgba(13,65,210,.22); }}
-.st-key-hero-search [data-testid="stChatInput"] > div {{ border-color:#C9D7FA; box-shadow:none; }}
+/* поле запроса: одно и то же на всех экранах, на всю ширину контентной области; одна рамка, приподнято тенью */
+[data-testid="stChatInput"] {{ width:100% !important; max-width:none !important; }}
+[data-testid="stChatInput"] > div, [data-testid="stChatInput"] > div:hover {{
+  background:#fff; border:2px solid {BLUE}; border-radius:20px; min-height:64px;
+  box-shadow:0 12px 32px rgba(13,65,210,.16); transition:box-shadow .15s; }}
+[data-testid="stChatInput"] > div:focus-within {{ border-color:{BLUE}; box-shadow:0 0 0 4px rgba(13,65,210,.16), 0 12px 32px rgba(13,65,210,.16); }}
 [data-testid="stChatInput"] [data-baseweb="textarea"] {{ border:0 !important; box-shadow:none !important; min-height:0; border-radius:0 !important; overflow:visible; }}
-[data-testid="stChatInput"] > div:hover {{ border-color:#C7C7CC; }}
-[data-testid="stChatInput"] > div:focus-within {{ border-color:{BLUE}; box-shadow:0 0 0 4px rgba(13,65,210,.16); }}
+[data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
+/* нижняя панель по ширине совпадает с контентной областью (.block-container) */
+[data-testid="stBottomBlockContainer"] {{ max-width:1040px !important; width:100%; padding:8px 24px 24px !important; margin:0 auto; }}
+.st-key-hero-search {{ width:100%; margin:28px 0 16px; padding:0; background:none; border:0; box-shadow:none; }}
 [data-testid="stChatInput"] button {{ background:{BLUE}; color:#fff; border-radius:12px; }}
 [data-testid="stChatInput"] button:disabled {{ background:#C5D0F3; }}
 [data-testid="stExpander"], [data-testid="stExpander"] details {{ background:#fff !important; border:1px solid #E8E8ED !important; border-radius:24px !important;
