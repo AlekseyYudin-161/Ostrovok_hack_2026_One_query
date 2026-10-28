@@ -28,6 +28,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from itertools import pairwise
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # запуск файлом: импорты harness.*, evals.*
@@ -133,7 +134,7 @@ PATCH_WAIVES = {"budget_total": ("budget_total",), "destination_id": ("destinati
 def relaxed_keys(turns: list[Turn]) -> set[str]:
     """Пользователь ответил на «нет вариантов + что поменять» — условия из применённого patch больше не его."""
     keys: set[str] = set()
-    for prev, nxt in zip(turns, turns[1:], strict=False):
+    for prev, nxt in pairwise(turns):
         relax = (prev.answer.get("plan") or {}).get("relax") if prev.mode == "no_solution" else None
         if relax and nxt.kind == "sim":
             for k in (relax[0].get("patch") or {}):
