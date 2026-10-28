@@ -113,7 +113,8 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
         hotel = offer.get("hotel") or {}
         opts.append({
             "name": hotel.get("name", "Отель"), "area": hotel.get("city") or "", "rating": hotel.get("rating"),
-            "price": it.get("total_price") or offer.get("price_total"), "label": it.get("label", "custom"),
+            "price": it.get("total_price") or offer.get("price_total"), "stay_price": offer.get("price_total"),
+            "label": it.get("label", "custom"),
             "meal": MEALS.get(offer.get("meal", "none"), ""),
             "cancel": "бесплатная отмена" if offer.get("refundable", True) else "без возврата",
             "tradeoffs": [t.get("note", "") for t in it.get("tradeoffs", [])],
@@ -123,13 +124,15 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
         for i, c in enumerate(answer.get("candidates") or []):
             opts.append({
                 "name": c.get("name", "Отель"), "area": c.get("city") or "", "rating": c.get("rating"),
-                "price": c.get("price_total"), "label": "balanced" if i == 0 else "custom",
+                "price": c.get("price_total"), "stay_price": c.get("price_total"),
+                "label": "balanced" if i == 0 else "custom",
                 "meal": MEALS.get(c.get("meal") or "", c.get("meal") or ""),
                 "cancel": CANCEL.get(c.get("cancellation") or "", c.get("cancellation") or ""),
                 "tradeoffs": [], "checks": [], "raw": c,
             })
     for o in opts:
-        o["over"] = bool(budget and o["price"] and o["price"] > budget)
+        # бюджет у агента только на проживание, поэтому сравниваем с ценой отеля, а не с итогом поездки
+        o["over"] = bool(budget and o["stay_price"] and o["stay_price"] > budget)
         o["photo"] = photo_for(o["name"])
     return opts
 
@@ -139,7 +142,10 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
     sub = " · ".join(x for x in [o["area"], f'{o["rating"]}' if o.get("rating") else "", o.get("meal", ""), o.get("cancel", "")] if x)
     warn = ""
     if o.get("over") and budget:
-        warn = f'<div style="margin-top:8px">{chip(f"дороже бюджета на {rub(o["price"] - budget)}", "red")}</div>'
+        warn = f'<div style="margin-top:8px">{chip(f"отель дороже бюджета на {rub(o["stay_price"] - budget)}", "red")}</div>'
+    stay = ""
+    if o.get("stay_price") and o["stay_price"] != o.get("price"):
+        stay = f'<div class="od-small">из них отель {rub(o["stay_price"])}</div>'
     trade = ""
     if o.get("tradeoffs"):
         li = "".join(f"<li>{esc(t)}</li>" for t in o["tradeoffs"])
@@ -148,7 +154,7 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
 {cover(o["photo"], o["name"], badge, green=rec, height=190)}
 <div style="padding:16px 12px 8px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
 <div><div class="od-h3">{esc(o["name"])}</div><div class="od-small" style="margin-top:4px">{esc(sub)}</div></div>
-<div class="od-price">{rub(o["price"])}</div></div>{warn}{trade}</div></div>''')
+<div style="text-align:right"><div class="od-price">{rub(o["price"])}</div>{stay}</div></div>{warn}{trade}</div></div>''')
 
 
 def area_card(d: dict, rec: bool = False) -> str:
@@ -230,13 +236,70 @@ def leg(kind: str, title: str, sub: str, price: float | None) -> str:
     return _h(f'<div class="od-leg">{ic}<div><div class="t">{esc(title)}</div><div class="s">{esc(sub)}</div></div><div class="p">{rub(price)}</div></div>')
 
 
+WARN = "#F5A623"
+
+
 def checks_list(checks: list[dict]) -> str:
+    """Проверки стыковок. warning/error (даже при ok=True) — жёлтым и с вариантами решения из fixes; остальное — зелёным."""
     out = []
     for c in checks:
-        ok = c.get("ok", True)
-        col = "#CDF4B0" if ok else ("#D93025" if c.get("severity") == "error" else "#F5A623")
-        out.append(f'<div class="od-li" style="font-size:14px;margin:0 0 8px"><span class="od-dot" style="background:{col};margin-top:5px"></span><span>{esc(c.get("message", ""))}</span></div>')
+        warn = c.get("severity") in ("warning", "error") or not c.get("ok", True)
+        dot = WARN if warn else "#CDF4B0"
+        fixes = ""
+        if warn and c.get("fixes"):
+            pills = "".join(f'<span style="display:inline-block;margin:6px 6px 0 0;padding:3px 10px;border-radius:12px;background:#FFFFFF;'
+                            f'border:1px solid #F0D9A8;color:#7A4B00;font-size:13px">{esc(f)}</span>' for f in c["fixes"])
+            fixes = f'<div><span class="od-small">Что можно сделать:</span> {pills}</div>'
+        box = "background:#FFF7E3;border-radius:12px;padding:10px 12px;" if warn else ""
+        out.append(f'<div class="od-li" style="font-size:14px;margin:0 0 8px;{box}"><span class="od-dot" style="background:{dot};margin-top:5px">'
+                   f'</span><span>{esc(c.get("message", ""))}{fixes}</span></div>')
     return "".join(out)
+
+
+def trip_line(text: str | None) -> str | None:
+    """Из длинного текста агента берём только строку «Поездка: …»."""
+    for line in (text or "").splitlines():
+        if line.strip().startswith("Поездка:"):
+            return line.strip()
+    return None
+
+
+def trip_header(text: str | None, assumptions: list[dict]) -> str:
+    """Над карточками: строка «Поездка: …» и допущения агента, каждое с новой строки."""
+    rows = []
+    line = trip_line(text)
+    if line:
+        rows.append(f'<div style="font-size:15px;font-weight:600">{esc(line)}</div>')
+    rows += [f'<div class="od-small" style="margin-top:4px">{esc(a.get("reason", ""))}</div>' for a in assumptions or [] if a.get("reason")]
+    return _h(f'<div style="margin:4px 8px 12px">{"".join(rows)}</div>') if rows else ""
+
+
+def parse_ages(text: str) -> list[int] | None:
+    """«4, 6» → [4, 6]; пусто → []; мусор или возраст вне 0–17 → None."""
+    parts = [p for p in text.replace(";", ",").replace(" ", ",").split(",") if p]
+    if not all(p.isdigit() and 0 <= int(p) <= 17 for p in parts):
+        return None
+    return [int(p) for p in parts]
+
+
+ADULTS_DEFAULT = 2  # допущение агента, если взрослых в запросе нет
+
+
+def params_patch(req: dict, budget: float | None, nights: float | None, adults: float | None, kids_text: str) -> tuple[dict, str]:
+    """Что пользователь изменил на панели «Параметры поездки». В patch уходят ТОЛЬКО изменённые поля."""
+    patch: dict = {}
+    if budget is not None and budget != req.get("budget_total"):
+        patch["budget_total"] = budget
+    if nights is not None and nights != req.get("nights"):
+        patch["nights"] = int(nights)
+    if adults is not None and int(adults) != (req.get("guests_adults") or ADULTS_DEFAULT):
+        patch["guests_adults"] = int(adults)
+    kids = parse_ages(kids_text)
+    if kids is None:
+        return patch, "Возраст детей — числа от 0 до 17 через запятую, например «4, 6»."
+    if kids != list(req.get("children_ages") or []):
+        patch["children_ages"] = kids
+    return patch, ""
 
 
 def confirm_card(text: str, tool: str | None = None) -> str:
@@ -247,12 +310,13 @@ def confirm_card(text: str, tool: str | None = None) -> str:
               f'{chip("Ждёт ответа", "blue")}</div><p class="od-small" style="margin:14px 0 0;font-size:15px;line-height:1.5">{body}</p></div>')
 
 
-def cart_summary(items: list[tuple[str, float]], total: float, budget: float | None = None) -> str:
+def cart_summary(items: list[tuple[str, float]], total: float, budget: float | None = None,
+                 stay: float | None = None) -> str:
     rows = "".join(row(k, rub(v)) for k, v in items)
     left = ""
-    if budget:
-        diff = budget - total
-        left = f'<p class="od-small" style="margin:10px 0 0">{"В рамках бюджета, остаётся " + rub(diff) if diff >= 0 else "Выше бюджета на " + rub(-diff)}</p>'
+    if budget and stay:  # бюджет — только на проживание
+        diff = budget - stay
+        left = (f'<p class="od-small" style="margin:10px 0 0">{"Проживание в рамках бюджета, остаётся " + rub(diff) if diff >= 0 else "Проживание выше бюджета на " + rub(-diff)}</p>')
     return _h(f'''<div class="od-glass"><div class="od-h3" style="margin-bottom:12px">Итого</div>
 <div style="display:flex;flex-direction:column;gap:10px">{rows}</div>
 <div style="height:1px;background:#E5E5EA;margin:14px 0"></div>{row("К оплате", rub(total), True)}{left}

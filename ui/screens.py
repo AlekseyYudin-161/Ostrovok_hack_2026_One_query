@@ -14,8 +14,6 @@ from ui import components as c
 from ui import demo_data as demo
 from ui.client import stream
 
-DEFAULT_REQUEST = {"raw_text": demo.DEMO_QUERY, "destination": "Сочи", "budget_total": 50000, "nights": 7, "guests_adults": 1}
-
 
 def md(html: str) -> None:
     st.markdown(html, unsafe_allow_html=True)
@@ -31,7 +29,7 @@ def S(key: str, default=None):
 
 
 def budget() -> float | None:
-    return (S("request") or DEFAULT_REQUEST).get("budget_total")
+    return (S("request") or {}).get("budget_total")
 
 
 # ---------- запуск агента ----------
@@ -74,8 +72,9 @@ def run_agent(text: str, patch: dict | None = None) -> None:
     elif mode == "purchased":
         go("paid")
     elif mode == "confirm_action":
-        # покупка поездки — корзина; доп. услуга без вариантов (addon_mock) — простой экран «да/нет»
-        go("cart" if c.options_from_answer(ans, budget()) else "confirm")
+        # варианты есть — снова показываем их, в корзину только по «Выбрать этот вариант»;
+        # доп. услуга без вариантов (addon_mock) — простой экран «да/нет»
+        go("results" if c.options_from_answer(ans, budget()) else "confirm")
     elif ans.get("changes"):
         go("diff")
     elif ans.get("destinations") and not S("chosen_area"):
@@ -174,16 +173,36 @@ def areas() -> None:
 
 # ---------- 4. результаты ----------
 def params_panel() -> None:
-    req = S("request") or DEFAULT_REQUEST
+    """Параметры из request как есть: пустое остаётся пустым, в patch уходит только изменённое."""
+    req = S("request") or {}
+    kids0 = ", ".join(str(a) for a in req.get("children_ages") or [])
+    sig = f'{req.get("budget_total")}-{req.get("nights")}-{req.get("guests_adults")}-{kids0}'  # новый запрос — поля заново
     with st.expander("Параметры поездки", expanded=False):
-        cols = st.columns(3)
-        b = cols[0].number_input("Бюджет, ₽", 5000, 1_000_000, int(req.get("budget_total") or 50000), 1000)
-        n = cols[1].number_input("Ночей", 1, 30, int(req.get("nights") or 7))
-        g = cols[2].number_input("Гостей", 1, 10, int(req.get("guests_adults") or 1))
-        if st.button("Пересчитать", type="primary"):
-            patch = {k: v for k, v in {"budget_total": b, "nights": n, "guests_adults": g}.items() if v != req.get(k)}
-            if patch:
-                submit("Пересчитай с новыми параметрами", patch)
+        cols = st.columns(4)
+        b = cols[0].number_input("Бюджет на проживание, ₽", 5000, 1_000_000, value=_int(req.get("budget_total")), step=1000,
+                                 placeholder="не задан", key=f"pp-b-{sig}")
+        n = cols[1].number_input("Ночей", 1, 30, value=_int(req.get("nights")), placeholder="не задано", key=f"pp-n-{sig}")
+        a = cols[2].number_input("Взрослых", 1, 10, value=req.get("guests_adults") or c.ADULTS_DEFAULT, key=f"pp-a-{sig}")
+        k = cols[3].text_input("Дети, возраст", value=kids0, placeholder="например, 4, 6", key=f"pp-k-{sig}")
+        patch, err = c.params_patch(req, b, n, a, k)
+        if err:
+            md(f'<p class="od-small" style="color:#B3261E">{c.esc(err)}</p>')
+        if st.button("Пересчитать", type="primary", disabled=not patch or bool(err), key="recalc"):
+            submit("Пересчитай с новыми параметрами", patch)
+
+
+def _int(v):
+    return int(v) if v is not None else None
+
+
+def other_areas(ans: dict) -> list[dict]:
+    """«Другие районы» — все, кроме текущего (выбранного, из запроса или того, что подобрал агент)."""
+    dests = ans.get("destinations") or []
+    its = ans.get("itineraries") or []
+    ids = {its[0].get("destination_id")} if its else set()  # район, который агент выбрал сам (первый вариант — рекомендуемый)
+    names = {str(x).lower() for x in (S("chosen_area"), (S("request") or {}).get("destination")) if x}
+    names |= {d["name"].lower() for d in dests if d.get("destination_id") in ids}
+    return [d for d in dests if d.get("destination_id") not in ids and d["name"].lower() not in names]
 
 
 def results() -> None:
@@ -191,11 +210,12 @@ def results() -> None:
     ans = S("answer")
     md(c.query_card(S("query") or demo.DEMO_QUERY))
     opts = c.options_from_answer(ans, budget())
-    md(f'<p class="od-small" style="margin-left:8px">✅ {c.esc(ans.get("text") or "Готово")}</p>')
     if not opts:  # ответ без вариантов (например, после отказа): только текст, чат внизу остаётся
+        md(f'<p class="od-small" style="margin-left:8px">{c.esc(ans.get("text") or "Готово")}</p>')
         return
+    md(c.trip_header(ans.get("text"), ans.get("assumptions") or []))  # длинный текст агента не показываем
     params_panel()
-    other = [d for d in ans.get("destinations", []) if d["name"] != S("chosen_area")]
+    other = other_areas(ans)
     if other:
         md('<p class="od-small" style="margin:4px 0 0 8px">Другие районы</p>')
         cols = st.columns(min(len(other), 4) + 1)
@@ -265,7 +285,7 @@ def cart() -> None:
     with left:
         md(c._h(f'<div class="od-glass" style="padding:26px 28px"><div style="display:flex;justify-content:space-between;align-items:center"><div class="od-h3" style="font-size:24px">Ваша поездка</div>{c.chip("Ждёт подтверждения", "blue")}</div>{"".join(legs)}<div style="margin-top:16px">{c.checks_list(o["checks"])}</div></div>'))
     with right:
-        md(c.cart_summary(items, o["price"], budget()))
+        md(c.cart_summary(items, o["price"], budget(), o.get("stay_price")))
         with st.container(key="main-pay"):
             if st.button("Подтвердить и оплатить", key="pay", use_container_width=True):
                 submit(f"да, вариант {idx + 1}")  # агент сам оформляет покупку и присылает номер брони

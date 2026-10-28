@@ -36,14 +36,15 @@ DESTINATIONS = [
 def _itinerary(name, city, rating, hotel_price, label, tradeoffs, over=0):
     total = hotel_price + 14200 + 3200
     return {
-        "destination_id": city.lower(), "checkin": "2026-09-12", "checkout": "2026-09-19", "label": label, "total_price": total,
+        "destination_id": {"Дагомыс": "dagomys", "Адлер": "adler", "Сочи-центр": "center"}.get(city, city.lower()), "checkin": "2026-09-12", "checkout": "2026-09-19", "label": label, "total_price": total,
         "outbound": {"kind": "flight", "from_city": "Москва", "to_city": "Сочи", "depart": "2026-09-12T09:40", "arrive": "2026-09-12T12:25", "price_total": 7100},
         "inbound": {"kind": "flight", "from_city": "Сочи", "to_city": "Москва", "depart": "2026-09-19T17:10", "arrive": "2026-09-19T19:55", "price_total": 7100},
         "transfers": [{"from_place": "Аэропорт", "to_place": city, "minutes": 55, "price_total": 1600, "kind": "taxi"},
                       {"from_place": city, "to_place": "Аэропорт", "minutes": 55, "price_total": 1600, "kind": "taxi"}],
         "hotel": {"hotel": {"name": name, "city": city, "rating": rating}, "meal": "breakfast", "refundable": True, "price_total": hotel_price},
         "checks": [{"rule": "arrival_vs_checkin", "ok": True, "severity": "info", "message": "Прилёт в 12:25, заселение с 14:00: успеваете"},
-                   {"rule": "checkout_vs_departure", "ok": True, "severity": "info", "message": "Выезд в 12:00, вылет в 17:10: хватает времени"},
+                   {"rule": "checkout_vs_departure", "ok": True, "severity": "warning", "message": "После выезда в 12:00 до отъезда в аэропорт ≈ 3 ч.",
+                    "fixes": ["запросить поздний выезд — 1 400 ₽", "оставить багаж в отеле"]},
                    {"rule": "dates_match", "ok": True, "severity": "info", "message": "Даты брони и рейсов совпадают"}],
         "tradeoffs": [{"criterion": "x", "this_value": 0, "best_value": 0, "note": t} for t in tradeoffs],
     }
@@ -52,12 +53,15 @@ def _itinerary(name, city, rating, hotel_price, label, tradeoffs, over=0):
 ITINERARIES = [
     _itinerary("Морской бриз", "Дагомыс", 8.7, 31500, "balanced", ["Дальше от центра: 25 минут на такси"]),
     _itinerary("Приморский", "Адлер", 8.2, 22200, "cheapest", ["Отель 3★ вместо 4★", "Вторая линия"]),
-    _itinerary("Белый парус", "Сочи-центр", 9.1, 43900, "most_comfortable", ["Выше бюджета"]),
+    _itinerary("Белый парус", "Сочи-центр", 9.1, 43900, "most_comfortable", ["Дороже других вариантов"]),
 ]
 
-ANSWER_PLAN = {"mode": "plan", "text": "Нашёл 3 варианта в Сочи.", "itineraries": ITINERARIES, "destinations": DESTINATIONS,
-               "assumptions": [{"field": "origin_city", "value": "Москва", "reason": "по умолчанию", "confirmed": False},
-                               {"field": "guests_adults", "value": 1, "reason": "«еду один»", "confirmed": True}],
+DEMO_REQUEST = {"raw_text": DEMO_QUERY, "destination": "Сочи", "budget_total": 50000, "nights": 7, "guests_adults": None,
+                "children_ages": []}
+
+ANSWER_PLAN = {"mode": "plan", "text": "Сочи: собрал 3 варианта поездки.\nПоездка: 01.11–08.11, 7 ночей.\nОстальное — допущения ниже.", "itineraries": ITINERARIES, "destinations": DESTINATIONS,
+               "assumptions": [{"field": "origin_city", "value": "Москва", "reason": "Вылет из Москвы — допущение по умолчанию.", "confirmed": False},
+                               {"field": "guests_adults", "value": 1, "reason": "Взрослых: 1 — вы написали «еду один».", "confirmed": True}],
                "changes": [], "candidates": [], "questions": [], "violations": []}
 
 ANSWER_CHANGED = {**ANSWER_PLAN, "changes": ["Бюджет: 50 000 → 60 000 ₽", "«Белый парус» теперь укладывается в бюджет (было +11 300 ₽)",
@@ -87,8 +91,8 @@ ANSWER_ADDON = {"mode": "confirm_action", "text": "Ранний заезд в «
 
 DEMO_STATES = {
     "start": {}, "working": {"events": [{"type": "plan", "node": "planner"}, {"type": "node_start", "node": "understand"}, {"type": "tool_call", "node": "search"}]},
-    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
-    "diff": {"answer": ANSWER_CHANGED, "prev_answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
-    "cart": {"answer": ANSWER_PLAN, "chosen_area": "Дагомыс", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
+    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "request": DEMO_REQUEST, "chosen_area": "Дагомыс"},
+    "diff": {"answer": ANSWER_CHANGED, "request": DEMO_REQUEST, "prev_answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
+    "cart": {"answer": ANSWER_PLAN, "request": DEMO_REQUEST, "chosen_area": "Дагомыс", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
     "none": {"answer": ANSWER_NONE}, "confirm": {"answer": ANSWER_ADDON},
 }

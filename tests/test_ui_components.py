@@ -16,10 +16,10 @@ def test_html_has_no_blank_lines() -> None:
 
 
 def test_options_from_itineraries_and_budget() -> None:
-    opts = c.options_from_answer(d.ANSWER_PLAN, budget=50000)
+    opts = c.options_from_answer(d.ANSWER_PLAN, budget=40000)  # бюджет сравниваем с ценой отеля, не с итогом поездки
     assert [o["name"] for o in opts] == ["Морской бриз", "Приморский", "Белый парус"]
     assert [o["over"] for o in opts] == [False, False, True]
-    assert "дороже бюджета на 11 300 ₽" in c.hotel_card(opts[2], budget=50000)
+    assert f"отель дороже бюджета на {c.rub(3900)}" in c.hotel_card(opts[2], budget=40000)
 
 
 def test_options_from_candidates_fallback() -> None:
@@ -69,3 +69,58 @@ def test_confirm_card_without_options():
     assert "Ранний заезд" in html and "Добавить?" in html
     assert "\n\n" not in html
     assert c.options_from_answer({"mode": "confirm_action", "candidates": [], "itineraries": []}) == []
+
+
+def test_params_patch_sends_only_changed_fields():
+    from ui import components as c
+
+    req = {"budget_total": None, "nights": 7, "guests_adults": None, "children_ages": [4, 6]}
+    assert c.params_patch(req, None, 7, 2, "4, 6") == ({}, "")  # ничего не меняли — patch пуст (кнопка неактивна)
+    assert c.params_patch(req, 100000, 7, 2, "4, 6")[0] == {"budget_total": 100000}
+    assert c.params_patch(req, None, 7, 3, "4, 6")[0] == {"guests_adults": 3}
+    assert c.params_patch(req, None, 7, 2, "4")[0] == {"children_ages": [4]}
+    patch, err = c.params_patch(req, None, 7, 2, "четыре")
+    assert err and patch == {}
+
+
+def test_parse_ages():
+    from ui import components as c
+
+    assert c.parse_ages("4, 6") == [4, 6] and c.parse_ages("") == [] and c.parse_ages("4 6") == [4, 6]
+    assert c.parse_ages("20") is None and c.parse_ages("a") is None
+
+
+def test_over_budget_compares_hotel_price_not_trip_total():
+    from ui import components as c
+
+    ans = {"itineraries": [{"total_price": 120000, "hotel": {"hotel": {"name": "Отель"}, "price_total": 80000}}]}
+    o = c.options_from_answer(ans, 100000)[0]
+    assert o["over"] is False and o["stay_price"] == 80000
+    assert "дороже бюджета" not in c.hotel_card(o, budget=100000)
+    o2 = c.options_from_answer(ans, 70000)[0]
+    assert o2["over"] and f"отель дороже бюджета на {c.rub(10000)}" in c.hotel_card(o2, budget=70000)
+
+
+def test_checks_warning_is_yellow_with_fixes():
+    from ui import components as c
+
+    html = c.checks_list([{"ok": True, "severity": "warning", "message": "Ждать 3 ч.", "fixes": ["запросить ранний заезд"]},
+                          {"ok": True, "severity": "info", "message": "Всё хорошо"}])
+    assert "#F5A623" in html and "запросить ранний заезд" in html and "#CDF4B0" in html
+    assert html.count("Что можно сделать") == 1
+
+
+def test_trip_header_only_trip_line_and_assumptions():
+    from ui import components as c
+
+    text = "Сочи: собрал 3 варианта.\nПоездка: 01.11–08.11, 7 ночей.\nОформить вариант 1?"
+    html = c.trip_header(text, [{"reason": "Вылет из Москвы."}, {"reason": "Взрослых: 2."}])
+    assert "Поездка: 01.11–08.11" in html and "собрал" not in html and "Оформить" not in html
+    assert html.count("Вылет из Москвы.") == 1 and "Взрослых: 2." in html
+
+
+def test_cart_summary_compares_budget_with_stay():
+    from ui import components as c
+
+    assert f"Проживание в рамках бюджета, остаётся {c.rub(20000)}" in c.cart_summary([("Отель", 80000)], 120000, 100000, 80000)
+    assert f"Проживание выше бюджета на {c.rub(10000)}" in c.cart_summary([("Отель", 80000)], 120000, 70000, 80000)

@@ -31,7 +31,7 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 | 4 | Выбор района | `mode = plan` и есть `destinations` | `DestinationOption`: `best_for`, `why`, `air_temp_c`, `sea_temp_c`, `travel_hours`, `direct`, `est_total_price`, `score` |
 | 5 | Результаты | `mode = plan` | `itineraries` (иначе `candidates`): `label`, `total_price`, `tradeoffs`, `checks`, `hotel` |
 | 6 | Было → стало | в ответе непустой `changes` | `AgentAnswer.changes`, прошлый ответ хранится в `session_state.prev_answer` |
-| 7 | Корзина | выбран вариант, или `mode = confirm_action` | `Itinerary`: `outbound`, `inbound`, `transfers`, `hotel`, `checks` |
+| 7 | Корзина | только по кнопке «Выбрать этот вариант» (на `confirm_action` показываются варианты, не корзина) | `Itinerary`: `outbound`, `inbound`, `transfers`, `hotel`, `checks` |
 | 7а | Подтверждение без вариантов | `mode = confirm_action`, `itineraries` и `candidates` пусты (например, `pending_action.tool = "addon_mock"`) | `text` агента; кнопки «Да» / «Нет» отправляют «да» / «нет» |
 | 8 | Оформлено | событие `purchase` | `booking_ref` |
 | 9 | Нет решения | `mode = no_solution` | `AgentAnswer.violations` |
@@ -53,7 +53,7 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 |---|---|
 | Ввод в поле запроса | текст как есть |
 | «Выбрать район» или чип «Другие районы» | `patch {"destination": "<name из карточки>"}`, агент пересобирает поездку |
-| «Пересчитать» в панели параметров | `patch` с изменёнными полями (`budget_total`, `nights`, `guests_adults`) |
+| «Пересчитать» в панели параметров | `patch` только с изменёнными полями (`budget_total`, `nights`, `guests_adults`, `children_ages`); поля берутся из `request`, пустое остаётся пустым, «Взрослых» при `null` показывает 2 (допущение агента); без изменений кнопка неактивна |
 | «Подтвердить и оплатить» | текст «да, вариант N» (N с единицы), номер брони приходит событием `purchase` |
 | «Применить» на экране «Нет решения» | `patch` из `answer.plan.relax[i]` как есть |
 
@@ -87,3 +87,11 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 
 ## Макеты
 Картинки экранов и лист состояний в `docs/ui/screens/`. Интерактивный холст с теми же экранами приложен в описании PR.
+
+
+## Как читаем ответ агента
+
+- Над карточками: только строка «Поездка: …» из `answer.text` и `answer.assumptions[].reason`, каждое с новой строки. Остальной текст агента не показывается.
+- Бюджет у агента только на проживание: метка «отель дороже бюджета» и итог в корзине сравнивают его с `itinerary.hotel.price_total`, а не с итогом поездки.
+- `checks` с `severity` warning/error (даже при `ok = true`) показываются жёлтым вместе с вариантами решения из `checks[].fixes`; info — зелёным.
+- «Другие районы» не включают текущий: выбранный, из `request.destination` или тот, что агент подобрал сам (`itineraries[0].destination_id`).
