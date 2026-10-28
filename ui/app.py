@@ -63,6 +63,10 @@ extra = [st.Page(p, title=title, url_path=slug) for slug, title, p in
          (("metrics", "Метрики", HERE / "pages" / "2_metrics.py"),) if p.exists()]
 screens.METRICS_PAGE = extra[0] if extra else None
 if extra:
-    st.navigation([st.Page(app_page, title="Приложение", default=True), *extra], position="hidden").run()
+    home = st.Page(app_page, title="Приложение", default=True)
+    page = st.navigation([home, *extra], position="hidden")
+    if page.url_path != home.url_path:  # на странице метрик меню нет, поэтому сверху ссылка обратно к агенту
+        st.page_link(home, label="← К поиску поездки")
+    page.run()
 else:
     app_page()
