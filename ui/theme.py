@@ -44,6 +44,8 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 .od-glass {{ background:#fff; border:1px solid #E8E8ED; box-shadow:0 1px 2px rgba(20,30,60,.04),0 8px 24px rgba(20,30,60,.04);
   border-radius:24px; padding:24px; transition:box-shadow .15s, border-color .15s; }}
 .od-glass.tight {{ padding:10px; }}
+.od-grid3 {{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:stretch; }}
+@media (max-width:760px) {{ .od-grid3 {{ grid-template-columns:1fr; }} }}
 .od-glass.rec {{ border:2px solid {GREEN}; }}
 .od-glass.dim {{ opacity:.7; }}
 .od-head {{ background:#fff; border:1px solid #E8E8ED;
@@ -161,8 +163,10 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
   box-shadow:0 2px 6px rgba(20,30,60,.06), 0 16px 36px rgba(13,65,210,.12); transition:border-color .15s, box-shadow .15s; }}
 [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
 /* первый экран: поле поиска стоит под заголовком, а не прижато к низу */
-.st-key-hero-search {{ max-width:760px; margin:8px auto 0; padding:10px; border-radius:28px;
-  background:linear-gradient(180deg,#FFFFFF 0%,#EAF0FF 100%); border:1px solid #E3EAFB; box-shadow:0 18px 44px rgba(13,65,210,.14); }}
+.st-key-hero-search {{ width:100%; margin:8px 0 0; padding:12px; border-radius:32px;
+  background:linear-gradient(135deg,{BLUE_TINT} 0%,#FFFFFF 100%); border:2px solid {BLUE};
+  box-shadow:0 0 0 6px rgba(13,65,210,.10), 0 20px 48px rgba(13,65,210,.22); }}
+.st-key-hero-search [data-testid="stChatInput"] > div {{ border-color:#C9D7FA; box-shadow:none; }}
 [data-testid="stChatInput"] [data-baseweb="textarea"] {{ border:0 !important; box-shadow:none !important; min-height:0; border-radius:0 !important; overflow:visible; }}
 [data-testid="stChatInput"] > div:hover {{ border-color:#C7C7CC; }}
 [data-testid="stChatInput"] > div:focus-within {{ border-color:{BLUE}; box-shadow:0 0 0 4px rgba(13,65,210,.16); }}

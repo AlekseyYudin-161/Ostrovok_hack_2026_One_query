@@ -126,12 +126,13 @@ def start() -> None:
             if st.button("Собрать поездку →", key=f"trip-{i}", use_container_width=True):
                 submit(trip["query"])
     md('<div class="od-h2" style="margin-top:28px">Как это <span class="od-blue">работает</span></div>')
-    cols = st.columns(3)
-    for col, (n, t, d) in zip(cols, [("01", "Напишите, как вам удобно", "Свободным текстом: куда, на сколько, с кем и сколько готовы потратить."),
-                                      ("02", "Агент уточнит или додумает", "Если чего-то не хватает, задаст вопрос или сделает допущение, которое вы поправите одним кликом."),
-                                      ("03", "Получите поездку целиком", "Район, отель, дорога и трансфер в одном варианте. Стыковки по времени проверены.")], strict=True):
-        col.markdown(c._h(f'<div class="od-glass" style="height:100%"><div style="font-size:48px;font-weight:700;letter-spacing:-2px;color:#D1D1D6">{n}</div>'
-                          f'<div class="od-h3" style="margin:8px 0">{t}</div><p class="od-muted">{d}</p></div>'), unsafe_allow_html=True)
+    steps = [("01", "Напишите, как вам удобно", "Свободным текстом: куда, на сколько, с кем и сколько готовы потратить."),
+             ("02", "Агент уточнит или додумает", "Если чего-то не хватает, задаст вопрос или сделает допущение, которое вы поправите одним кликом."),
+             ("03", "Получите поездку целиком", "Район, отель, дорога и трансфер в одном варианте. Стыковки по времени проверены.")]
+    # одной сеткой, а не st.columns: ячейки сетки всегда одной высоты
+    md(c._h('<div class="od-grid3">' + "".join(
+        f'<div class="od-glass"><div style="font-size:48px;font-weight:700;letter-spacing:-2px;color:#D1D1D6">{n}</div>'
+        f'<div class="od-h3" style="margin:8px 0">{t}</div><p class="od-muted">{d}</p></div>' for n, t, d in steps) + '</div>'))
     md('<p class="od-small" style="text-align:center;margin-top:24px">Все данные в демо вымышленные: отели, цены и расписания не настоящие.</p>')
 
 
