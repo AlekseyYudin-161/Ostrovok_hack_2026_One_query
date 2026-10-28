@@ -184,3 +184,9 @@ def test_no_solution_keeps_only_trip_and_no_variants_lines() -> None:
             "Дагомыс: нет вариантов до 50 000 ₽. Поднять бюджет или посмотреть другой район?")
     assert c.no_solution_lines(text) == ["Поездка: 01.11–08.11, 7 ночей.", "Дагомыс: нет вариантов до 50 000 ₽"]
     assert c.no_solution_lines("") == [] and c.no_solution_lines(None) == []
+
+
+def test_scroll_top_js_targets_page_container_and_changes_each_time() -> None:
+    js = c.scroll_top_js(1)
+    assert "stMain" in js and "scrollTop=0" in js and "scrollTo(0,0)" in js
+    assert c.scroll_top_js(1) != c.scroll_top_js(2)  # иначе Streamlit не выполнит скрипт повторно

@@ -47,6 +47,7 @@ def app_page() -> None:
             screens.md(c.timeline(ss.get("events", []), False))
     else:
         screens.SCREENS[ss.screen]()
+    screens.scroll_top()
 
     hint = "Например: можно ранний заезд?" if ss.screen == "paid" else "Куда хотите поехать?"
     if ss.screen in screens.CHAT_SCREENS and (prompt := st.chat_input(hint)):
@@ -55,11 +56,13 @@ def app_page() -> None:
 
 st.set_page_config(page_title="О!дин запрос", page_icon="🧳", layout="centered")
 
-# Боковое меню: страницы из ui/pages/ (например, «Метрики») подписываем по-русски.
-# Если дополнительных страниц нет, меню не показывается и приложение запускается как раньше.
+# Страницы из ui/pages/ (например, «Метрики») подключаем через st.navigation, но боковое меню прячем:
+# пользователю оно не нужно, на метрики ведёт ссылка внизу главной (screens.start). Адрес /metrics работает.
+# Если дополнительных страниц нет, приложение запускается как раньше.
 extra = [st.Page(p, title=title, url_path=slug) for slug, title, p in
          (("metrics", "Метрики", HERE / "pages" / "2_metrics.py"),) if p.exists()]
+screens.METRICS_PAGE = extra[0] if extra else None
 if extra:
-    st.navigation([st.Page(app_page, title="Приложение", default=True), *extra]).run()
+    st.navigation([st.Page(app_page, title="Приложение", default=True), *extra], position="hidden").run()
 else:
     app_page()

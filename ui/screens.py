@@ -19,9 +19,28 @@ def md(html: str) -> None:
     st.markdown(html, unsafe_allow_html=True)
 
 
+METRICS_PAGE = None  # страница «Метрики»; app.py подставляет её, если файл ui/pages/2_metrics.py есть
+
+
 def go(screen: str) -> None:
     st.session_state.screen = screen
+    st.session_state._scroll_top = True  # новый экран всегда открываем с начала страницы
     st.rerun()
+
+
+def scroll_top() -> None:
+    """Вызывается в конце отрисовки экрана: если выставлен флаг, показываем верх страницы.
+    Иначе после ответа агента пользователь остаётся внизу у последней карточки, а «Поездка / Изменил» уходят из виду."""
+    if not st.session_state.pop("_scroll_top", False):
+        return
+    n = st.session_state["_scroll_n"] = st.session_state.get("_scroll_n", 0) + 1
+    js = c.scroll_top_js(n)
+    try:
+        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
+    except TypeError:  # старый Streamlit без выполнения JS в st.html: скрипт в iframe, поэтому идём через window.parent
+        import streamlit.components.v1 as components
+
+        components.html(f"<script>{js.replace('document,window', 'window.parent.document,window.parent')}</script>", height=0)
 
 
 def S(key: str, default=None):
@@ -134,6 +153,9 @@ def start() -> None:
         f'<div class="od-glass"><div style="font-size:48px;font-weight:700;letter-spacing:-2px;color:#D1D1D6">{n}</div>'
         f'<div class="od-h3" style="margin:8px 0">{t}</div><p class="od-muted">{d}</p></div>' for n, t, d in steps) + '</div>'))
     md('<p class="od-small" style="text-align:center;margin-top:24px">Все данные в демо вымышленные: отели, цены и расписания не настоящие.</p>')
+    if METRICS_PAGE is not None:  # ненавязчивая ссылка внизу главной: как проверяем качество агента
+        with st.container(key="metrics-link"):
+            st.page_link(METRICS_PAGE, label="Как мы проверяем качество агента →")
 
 
 # ---------- 2. уточнение ----------

@@ -175,6 +175,11 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
 [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
 /* нижняя панель по ширине совпадает с контентной областью (.block-container) */
 [data-testid="stBottomBlockContainer"] {{ max-width:1040px !important; width:100%; padding:8px 24px 24px !important; margin:0 auto; }}
+.st-key-metrics-link {{ margin-top:4px; }}
+.st-key-metrics-link [data-testid="stPageLink"] {{ justify-content:center; }}
+.st-key-metrics-link [data-testid="stPageLink"] a {{ background:transparent; padding:4px 8px; }}
+.st-key-metrics-link [data-testid="stPageLink"] p {{ font-size:13px; color:#86868B; }}
+.st-key-metrics-link [data-testid="stPageLink"] a:hover p {{ color:{BLUE}; }}
 .st-key-hero-search {{ width:100%; margin:28px 0 16px; padding:0; background:none; border:0; box-shadow:none; }}
 [data-testid="stChatInput"] button {{ background:{BLUE}; color:#fff; border-radius:12px; }}
 [data-testid="stChatInput"] button:disabled {{ background:#C5D0F3; }}
