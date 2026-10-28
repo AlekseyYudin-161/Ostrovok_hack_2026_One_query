@@ -48,7 +48,8 @@ def app_page() -> None:
     else:
         screens.SCREENS[ss.screen]()
 
-    if ss.screen in screens.CHAT_SCREENS and (prompt := st.chat_input("Куда хотите поехать?")):
+    hint = "Например: можно ранний заезд?" if ss.screen == "paid" else "Куда хотите поехать?"
+    if ss.screen in screens.CHAT_SCREENS and (prompt := st.chat_input(hint)):
         screens.submit(prompt)
 
 

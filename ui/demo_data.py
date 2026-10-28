@@ -70,12 +70,18 @@ ANSWER_CHANGED = {**ANSWER_PLAN, "changes": ["Бюджет: 50 000 → 60 000 �
                                              "Рекомендация сменилась: «Морской бриз» → «Белый парус»", "Не изменилось: 4★, первая линия, завтрак, даты"],
                   "itineraries": [{**ITINERARIES[2], "label": "balanced"}, {**ITINERARIES[0], "label": "custom"}, ITINERARIES[1]]}
 
+ANSWER_ASK = {**ANSWER_PLAN, "mode": "confirm_action",  # ответ на «нет, вариант 3»: агент переспрашивает, варианты те же
+              "changes": ["Даты: 30.10–01.11 → 01.11–03.11", "Район: Адлер → Хоста"],
+              "questions": ["Оформить вариант 3 «Белый парус» и дорогу за 62 900 ₽? Ответьте «да» или «нет» (демо-оплата)."],
+              "pending_action": {"tool": "purchase_mock", "label": "most_comfortable"}}
+
 ANSWER_CLARIFY = {"mode": "clarify", "text": "Почти всё понятно. Осталось два уточнения, чтобы не угадывать.",
                   "questions": ["Когда поедете?", "Сколько человек?"], "candidates": [], "itineraries": [], "destinations": [],
                   "assumptions": ANSWER_PLAN["assumptions"], "changes": [], "violations": []}
 QUICK_REPLIES = {"Когда поедете?": ["Сентябрь", "Октябрь", "Ноябрь"], "Сколько человек?": ["1", "2", "С детьми"]}
 
-ANSWER_NONE = {"mode": "no_solution", "text": "", "candidates": [], "itineraries": [], "destinations": [], "assumptions": [], "changes": [], "questions": [],
+ANSWER_NONE = {"mode": "no_solution",
+               "text": "Поездка: 01.11–08.11, 7 ночей.\nИзменил: Район: Хоста → Дагомыс.\nДагомыс: нет вариантов до 50 000 ₽. Поднять бюджет или посмотреть другой район?", "candidates": [], "itineraries": [], "destinations": [], "assumptions": [], "changes": [], "questions": [],
                "plan": {"relax": None}, "violations": ["4★ на первой линии с завтраком в сентябре стоят от 61 300 ₽, вы готовы потратить 50 000 ₽",
                               "С бюджетом 50 000 ₽ на первой линии остаются только 3★ без завтрака"]}
 RELAX = [  # ТОЛЬКО для демо-экрана: настоящие варианты приходят в answer.plan.relax
@@ -93,7 +99,7 @@ ANSWER_ADDON = {"mode": "confirm_action", "text": "Ранний заезд в «
 
 DEMO_STATES = {
     "start": {}, "working": {"events": [{"type": "plan", "node": "planner"}, {"type": "node_start", "node": "understand"}, {"type": "tool_call", "node": "search"}]},
-    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_PLAN, "request": DEMO_REQUEST, "chosen_area": "Дагомыс"},
+    "clarify": {"answer": ANSWER_CLARIFY}, "areas": {"answer": ANSWER_PLAN}, "results": {"answer": ANSWER_ASK, "request": DEMO_REQUEST, "chosen_area": "Дагомыс"},
     "diff": {"answer": ANSWER_CHANGED, "request": DEMO_REQUEST, "prev_answer": ANSWER_PLAN, "chosen_area": "Дагомыс"},
     "cart": {"answer": ANSWER_PLAN, "request": DEMO_REQUEST, "chosen_area": "Дагомыс", "chosen": 0}, "paid": {"answer": ANSWER_PLAN, "chosen": 0, "booking_ref": "ODN-7K2F9Q"},
     "none": {"answer": ANSWER_NONE}, "confirm": {"answer": ANSWER_ADDON},

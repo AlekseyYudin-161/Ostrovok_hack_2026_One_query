@@ -143,7 +143,8 @@ def clarify() -> None:
     md(c.user_bubble(S("query") or "Хочу на море, недорого, на неделю"))
     md(c.agent_bubble(ans.get("text") or "Нужно уточнить пару деталей."))
     for q in ans.get("questions", []):
-        md(f'<div style="font-size:17px;font-weight:600;margin-top:8px">{c.esc(q)}</div>')
+        if q.strip() not in (ans.get("text") or ""):  # вопрос уже в тексте агента — второй раз не повторяем
+            md(f'<div style="font-size:17px;font-weight:600;margin-top:8px">{c.esc(q)}</div>')
         options = demo.QUICK_REPLIES.get(q, [])
         if options:
             cols = st.columns(len(options) + 2)
@@ -180,7 +181,7 @@ def params_panel() -> None:
     """Параметры из request как есть: пустое остаётся пустым, в patch уходит только изменённое."""
     req = S("request") or {}
     kids0 = ", ".join(str(a) for a in req.get("children_ages") or [])
-    sig = f'{req.get("budget_total")}-{req.get("nights")}-{req.get("guests_adults")}-{kids0}'  # новый запрос — поля заново
+    sig = f'{req.get("budget_total")}-{req.get("nights")}-{req.get("guests_adults")}-{kids0}-{req.get("pets")}'  # новый запрос — поля заново
     with st.expander("Параметры поездки", expanded=False):
         cols = st.columns(4)
         b = cols[0].number_input("Бюджет на проживание, ₽", 5000, 1_000_000, value=_int(req.get("budget_total")), step=1000,
@@ -188,7 +189,8 @@ def params_panel() -> None:
         n = cols[1].number_input("Ночей", 1, 30, value=_int(req.get("nights")), placeholder="не задано", key=f"pp-n-{sig}")
         a = cols[2].number_input("Взрослых", 1, 10, value=req.get("guests_adults") or c.ADULTS_DEFAULT, key=f"pp-a-{sig}")
         k = cols[3].text_input("Дети, возраст", value=kids0, placeholder="например, 4, 6", key=f"pp-k-{sig}")
-        patch, err = c.params_patch(req, b, n, a, k)
+        pets = st.toggle("С животным", value=bool(req.get("pets")), key=f"pp-p-{sig}")
+        patch, err = c.params_patch(req, b, n, a, k, pets)
         if err:
             md(f'<p class="od-small" style="color:#B3261E">{c.esc(err)}</p>')
         if st.button("Пересчитать", type="primary", disabled=not patch or bool(err), key="recalc"):
@@ -217,7 +219,9 @@ def results() -> None:
     if not opts:  # ответ без вариантов (например, после отказа): только текст, чат внизу остаётся
         md(f'<p class="od-small" style="margin-left:8px">{c.esc(ans.get("text") or "Готово")}</p>')
         return
-    md(c.trip_header(ans.get("text"), ans.get("assumptions") or []))  # длинный текст агента не показываем
+    md(c.trip_header(ans.get("text"), ans.get("assumptions") or [], ans.get("changes")))  # длинный текст агента не показываем
+    md(c.agent_question(ans.get("questions") or []))  # переспрос («Оформить вариант 3…?») виден над вариантами
+    focus = c.pending_index(opts, ans.get("pending_action"))  # вариант, который агент предлагает оформить
     params_panel()
     other = other_areas(ans)
     if other:
@@ -232,10 +236,10 @@ def results() -> None:
         return
     md(f'<div class="od-h2">{len(opts)} {"вариант" if len(opts) == 1 else "варианта" if len(opts) < 5 else "вариантов"} поездки</div>')
     for i, o in enumerate(opts):
-        md(c.hotel_card(o, rec=i == 0, budget=budget()))
+        md(c.hotel_card(o, rec=i == focus, budget=budget()))
         if o.get("checks"):
             md(f'<div class="od-glass" style="margin-top:-8px;padding:14px 22px">{c.checks_list(o["checks"])}</div>')
-        with st.container(key=f"main-pick-{i}" if i == 0 else f"pick-{i}"):
+        with st.container(key=f"main-pick-{i}" if i == focus else f"pick-{i}"):
             if st.button("Выбрать этот вариант", key=f"choose-{i}", use_container_width=True):
                 st.session_state.chosen = i
                 go("cart")
@@ -275,10 +279,10 @@ def cart() -> None:
         if out:
             legs.append(c.leg(out["kind"], f'{out["from_city"]} → {out["to_city"]}', f'{c.day(out["depart"])} · {out["depart"][11:16]} → {out["arrive"][11:16]}', out["price_total"]))
         if tr:
-            legs.append(c.leg("taxi", f'Трансфер: {tr[0]["from_place"]} → {tr[0]["to_place"]}', f'{tr[0]["minutes"]} минут', tr[0]["price_total"]))
+            legs.append(c.leg(tr[0].get("kind") or "taxi", c.transfer_title(tr[0]), f'{tr[0]["minutes"]} минут', tr[0]["price_total"]))
         legs.append(c.leg("hotel", f'«{o["name"]}» · {o["area"]}', f'{o.get("meal", "")} · {o.get("cancel", "")}', it["hotel"]["price_total"]))
         if len(tr) > 1:
-            legs.append(c.leg("taxi", f'Трансфер: {tr[1]["from_place"]} → {tr[1]["to_place"]}', f'{tr[1]["minutes"]} минут', tr[1]["price_total"]))
+            legs.append(c.leg(tr[1].get("kind") or "taxi", c.transfer_title(tr[1]), f'{tr[1]["minutes"]} минут', tr[1]["price_total"]))
         if inb:
             legs.append(c.leg(inb["kind"], f'{inb["from_city"]} → {inb["to_city"]}', f'{c.day(inb["depart"])} · {inb["depart"][11:16]} → {inb["arrive"][11:16]}', inb["price_total"]))
         items = [("Перелёты", sum(x["price_total"] for x in (out, inb) if x)), ("Отель", it["hotel"]["price_total"]), ("Трансферы", sum(t["price_total"] for t in tr))]
@@ -325,13 +329,14 @@ def paid() -> None:
         md(c.hotel_card(o, rec=True, budget=None))
     if st.button("Начать новый запрос", type="primary"):
         new_session()
+    # поле ввода внизу остаётся в той же сессии: после брони агент умеет «ранний заезд», «поздний выезд»
 
 
 # ---------- 8. нет решения ----------
 def none() -> None:
     md(c.head())
     ans = S("answer") or {}
-    md(c.no_solution_hero(ans.get("violations") or ([ans["text"]] if ans.get("text") else [])))
+    md(c.no_solution_hero(c.no_solution_lines(ans.get("text")) or ans.get("violations") or ([ans["text"]] if ans.get("text") else [])))
     relax = (ans.get("plan") or {}).get("relax") or []  # реальные варианты от агента; нет — блок не показываем
     if not relax:
         return
@@ -346,4 +351,4 @@ def none() -> None:
 
 
 SCREENS = {"start": start, "clarify": clarify, "areas": areas, "results": results, "diff": diff, "cart": cart, "confirm": confirm, "paid": paid, "none": none}
-CHAT_SCREENS = {"clarify", "areas", "results", "diff", "none", "confirm"}  # внизу страницы; на старте поле под заголовком
+CHAT_SCREENS = {"clarify", "areas", "results", "diff", "none", "confirm", "paid"}  # внизу страницы; на старте поле под заголовком

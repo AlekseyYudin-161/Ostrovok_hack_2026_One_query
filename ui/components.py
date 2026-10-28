@@ -105,6 +105,40 @@ def bullets(items: list[tuple[str, str]]) -> str:
 
 
 # ---------- адаптер: ответ агента → карточки отелей ----------
+TRANSPORT_ICON = {"flight": "✈️", "train": "🚆", "local_train": "🚆", "bus": "🚌"}
+TRANSFER_KIND = {"taxi": "такси", "shuttle": "шаттл", "public": "автобус"}  # TransferOption.kind
+TRANSFER_ICON = {"taxi": "🚕", "shuttle": "🚐", "public": "🚌"}
+
+
+def _hm(iso: str | None) -> str:
+    return (iso or "")[11:16]
+
+
+def route_line(it: dict) -> str:
+    """Одна строка про дорогу для сравнения вариантов: «✈️ 06:30→09:00 · обратно 19:40→22:10 · 🚕 такси 15 мин»."""
+    parts = []
+    out, inb, tr = it.get("outbound"), it.get("inbound"), it.get("transfers") or []
+    if out:
+        parts.append(f'{TRANSPORT_ICON.get(out.get("kind"), "✈️")} {_hm(out.get("depart"))}→{_hm(out.get("arrive"))}')
+    if inb:
+        parts.append(f'обратно {_hm(inb.get("depart"))}→{_hm(inb.get("arrive"))}')
+    if tr:
+        kind = tr[0].get("kind") or "taxi"
+        parts.append(f'{TRANSFER_ICON.get(kind, "🚕")} {TRANSFER_KIND.get(kind, "трансфер")} {tr[0].get("minutes")} мин')
+    return " · ".join(parts)
+
+
+def pending_index(opts: list[dict], pending: dict | None) -> int:
+    """Какой вариант агент предлагает оформить (pending_action): по hotel_id, затем по label. По умолчанию первый."""
+    if pending:
+        for key, field in (("hotel_id", "hotel_id"), ("label", "label")):
+            if pending.get(key):
+                for i, o in enumerate(opts):
+                    if o.get(field) == pending[key]:
+                        return i
+    return 0
+
+
 def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]:
     """Единый вид варианта для карточки. Берёт itineraries (если есть), иначе candidates."""
     opts: list[dict] = []
@@ -117,6 +151,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
             "label": it.get("label", "custom"),
             "meal": MEALS.get(offer.get("meal", "none"), ""),
             "cancel": "бесплатная отмена" if offer.get("refundable", True) else "без возврата",
+            "route": route_line(it), "hotel_id": hotel.get("hotel_id"),
             "why": [w for w in it.get("why") or [] if w],  # «Почему» — список строк от агента, над «Чем пожертвовали»
             "tradeoffs": [t.get("note", "") for t in it.get("tradeoffs", [])],
             "checks": it.get("checks", []), "raw": it,
@@ -129,6 +164,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
                 "label": "balanced" if i == 0 else "custom",
                 "meal": MEALS.get(c.get("meal") or "", c.get("meal") or ""),
                 "cancel": CANCEL.get(c.get("cancellation") or "", c.get("cancellation") or ""),
+                "route": "", "hotel_id": c.get("hotel_id"),
                 "why": [], "tradeoffs": [], "checks": [], "raw": c,
             })
     for o in opts:
@@ -141,6 +177,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
 def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
     badge = LABELS.get(o["label"], "") if o["label"] != "custom" else ""
     sub = " · ".join(x for x in [o["area"], f'{o["rating"]}' if o.get("rating") else "", o.get("meal", ""), o.get("cancel", "")] if x)
+    route = f'<div style="margin-top:10px;font-size:14px;font-weight:500">{esc(o["route"])}</div>' if o.get("route") else ""
     warn = ""
     if o.get("over") and budget:
         warn = f'<div style="margin-top:8px">{chip(f"отель дороже бюджета на {rub(o["stay_price"] - budget)}", "red")}</div>'
@@ -160,7 +197,7 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
 {cover(o["photo"], o["name"], badge, green=rec, height=190)}
 <div style="padding:16px 12px 8px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
 <div><div class="od-h3">{esc(o["name"])}</div><div class="od-small" style="margin-top:4px">{esc(sub)}</div></div>
-<div style="text-align:right"><div class="od-price">{rub(o["price"])}</div>{stay}</div></div>{warn}{why}{trade}</div></div>''')
+<div style="text-align:right"><div class="od-price">{rub(o["price"])}</div>{stay}</div></div>{route}{warn}{why}{trade}</div></div>''')
 
 
 def area_card(d: dict, rec: bool = False) -> str:
@@ -236,8 +273,12 @@ def user_bubble(text: str) -> str:
     return f'<div class="od-bubble-user">{esc(text)}</div>'
 
 
+def transfer_title(t: dict) -> str:
+    return f'Трансфер, {TRANSFER_KIND.get(t.get("kind") or "taxi", "трансфер")}: {t["from_place"]} → {t["to_place"]}'
+
+
 def leg(kind: str, title: str, sub: str, price: float | None) -> str:
-    icons = {"flight": "✈", "train": "🚆", "local_train": "🚆", "bus": "🚌", "taxi": "🚕", "hotel": "🏨"}
+    icons = {"flight": "✈", "train": "🚆", "local_train": "🚆", "bus": "🚌", "taxi": "🚕", "shuttle": "🚐", "public": "🚌", "hotel": "🏨"}
     ic = f'<span style="width:44px;height:44px;border-radius:14px;background:#F2F2F7;display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto">{icons.get(kind, "•")}</span>'
     return _h(f'<div class="od-leg">{ic}<div><div class="t">{esc(title)}</div><div class="s">{esc(sub)}</div></div><div class="p">{rub(price)}</div></div>')
 
@@ -270,14 +311,26 @@ def trip_line(text: str | None) -> str | None:
     return None
 
 
-def trip_header(text: str | None, assumptions: list[dict]) -> str:
-    """Над карточками: строка «Поездка: …» и допущения агента, каждое с новой строки."""
+def trip_header(text: str | None, assumptions: list[dict], changes: list[str] | None = None) -> str:
+    """Над карточками: «Поездка: …», «Изменил: …» (после пересборки) и допущения агента, каждое с новой строки."""
     rows = []
     line = trip_line(text)
     if line:
         rows.append(f'<div style="font-size:15px;font-weight:600">{esc(line)}</div>')
+    if changes:
+        rows.append(f'<div style="font-size:15px;font-weight:600;margin-top:4px">Изменил: {esc("; ".join(changes))}</div>')
     rows += [f'<div class="od-small" style="margin-top:4px">{esc(a.get("reason", ""))}</div>' for a in assumptions or [] if a.get("reason")]
     return _h(f'<div style="margin:4px 8px 12px">{"".join(rows)}</div>') if rows else ""
+
+
+def agent_question(questions: list[str]) -> str:
+    """Вопрос агента (answer.questions) заметным блоком над вариантами, например «Оформить вариант 3…?»."""
+    qs = [q for q in questions or [] if q]
+    if not qs:
+        return ""
+    body = "".join(f'<div style="font-size:17px;font-weight:600;line-height:1.4;margin-top:{4 if i else 0}px">{esc(q)}</div>' for i, q in enumerate(qs))
+    return _h(f'<div class="od-glass" style="border:2px solid {GREEN};padding:18px 24px"><div class="od-small" style="margin-bottom:6px">Вопрос агента</div>{body}'
+              '<div class="od-small" style="margin-top:8px">Ответьте в строке ниже: «да» или «нет».</div></div>')
 
 
 def parse_ages(text: str) -> list[int] | None:
@@ -291,7 +344,8 @@ def parse_ages(text: str) -> list[int] | None:
 ADULTS_DEFAULT = 2  # допущение агента, если взрослых в запросе нет
 
 
-def params_patch(req: dict, budget: float | None, nights: float | None, adults: float | None, kids_text: str) -> tuple[dict, str]:
+def params_patch(req: dict, budget: float | None, nights: float | None, adults: float | None, kids_text: str,
+                 pets: bool | None = None) -> tuple[dict, str]:
     """Что пользователь изменил на панели «Параметры поездки». В patch уходят ТОЛЬКО изменённые поля."""
     patch: dict = {}
     if budget is not None and budget != req.get("budget_total"):
@@ -300,6 +354,8 @@ def params_patch(req: dict, budget: float | None, nights: float | None, adults: 
         patch["nights"] = int(nights)
     if adults is not None and int(adults) != (req.get("guests_adults") or ADULTS_DEFAULT):
         patch["guests_adults"] = int(adults)
+    if pets is not None and bool(pets) != bool(req.get("pets")):
+        patch["pets"] = bool(pets)
     kids = parse_ages(kids_text)
     if kids is None:
         return patch, "Возраст детей — числа от 0 до 17 через запятую, например «4, 6»."
@@ -341,6 +397,18 @@ def paid_hero(ref: str) -> str:
     return _h(f'''<div style="text-align:center;padding:24px 0 8px"><div style="display:inline-flex">{icon}</div>
 <h1 class="od-h1" style="font-size:40px;margin:14px 0 8px">Поездка оформлена</h1><p class="od-muted" style="font-size:17px">Это демо: бронь не создавалась и деньги не списывались.</p>
 <span style="display:inline-block;margin-top:14px;background:#fff;border:1px solid #E5E5EA;border-radius:16px;padding:12px 22px;font-size:15px;color:#6C6C70">Номер брони <b style="color:#14161F;letter-spacing:1px;margin-left:6px">{esc(ref)}</b></span></div>''')
+
+
+def no_solution_lines(text: str | None) -> list[str]:
+    """Из текста агента оставляем «Поездка: …» и «<район>: нет вариантов до <бюджет>»; остальное дублирует карточки."""
+    out: list[str] = []
+    line = trip_line(text)
+    if line:
+        out.append(line)
+    m = re.search(r"[^\n.]*?: нет вариантов[^.\n]*", text or "")
+    if m:
+        out.append(m.group(0).strip())
+    return out
 
 
 def no_solution_hero(violations: list[str]) -> str:

@@ -36,7 +36,9 @@ CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"], .stApp {{ font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter',system-ui,sans-serif; color:{TEXT}; }}
 .stApp {{ background:#F5F5F7; }}
-header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
+footer, #MainMenu, [data-testid="stToolbar"] {{ display:none !important; }}
+/* шапку Streamlit не прячем: в ней кнопка раскрытия бокового меню */
+header[data-testid="stHeader"] {{ background:transparent; }}
 .block-container {{ max-width:1040px; padding:20px 24px 96px; }}
 [data-testid="stVerticalBlock"] {{ gap:1rem !important; }}
 /* Streamlit гасит нижний отступ markdown отрицательным margin (под последний <p>); у нашего HTML <p> нет,

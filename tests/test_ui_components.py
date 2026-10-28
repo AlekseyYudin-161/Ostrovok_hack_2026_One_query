@@ -136,3 +136,51 @@ def test_why_is_shown_above_tradeoffs():
     assert html.index("Почему этот вариант") < html.index("Чем пожертвовали")
     plain = c.hotel_card(c.options_from_answer({"itineraries": [{"total_price": 1, "hotel": {"hotel": {"name": "О"}}}]})[0])
     assert "Почему" not in plain
+
+
+def test_agent_question_is_prominent_and_pending_variant_is_highlighted() -> None:
+    ans = d.ANSWER_ASK
+    html = c.agent_question(ans["questions"])
+    assert "Вопрос агента" in html and "Оформить вариант 3" in html and "\n\n" not in html
+    assert c.agent_question([]) == ""
+    opts = c.options_from_answer(ans)
+    assert c.pending_index(opts, ans["pending_action"]) == 2  # по label
+    assert c.pending_index(opts, {"hotel_id": "нет такого"}) == 0
+    assert c.pending_index(opts, None) == 0
+
+
+def test_trip_header_shows_changes_above_assumptions() -> None:
+    html = c.trip_header(d.ANSWER_PLAN["text"], d.ANSWER_PLAN["assumptions"], d.ANSWER_ASK["changes"])
+    assert "Изменил: Даты: 30.10–01.11 → 01.11–03.11; Район: Адлер → Хоста" in html
+    assert html.index("Поездка:") < html.index("Изменил:") < html.index("Вылет из Москвы")
+    assert "Изменил" not in c.trip_header(d.ANSWER_PLAN["text"], [], [])
+
+
+def test_route_line_in_card() -> None:
+    (o, *_) = c.options_from_answer(d.ANSWER_PLAN)
+    assert o["route"] == "✈️ 09:40→12:25 · обратно 17:10→19:55 · 🚕 такси 55 мин"
+    assert o["route"] in c.hotel_card(o)
+    assert c.route_line({}) == ""
+    bus = {"transfers": [{"kind": "public", "minutes": 40}, {"kind": "shuttle", "minutes": 5}]}
+    assert c.route_line(bus) == "🚌 автобус 40 мин"
+
+
+def test_transfer_title_has_kind() -> None:
+    t = {"from_place": "Аэропорт", "to_place": "Адлер", "kind": "shuttle"}
+    assert c.transfer_title(t) == "Трансфер, шаттл: Аэропорт → Адлер"
+    assert c.transfer_title({**t, "kind": "public"}).startswith("Трансфер, автобус")
+
+
+def test_params_patch_pets_only_when_changed() -> None:
+    req = {"budget_total": 50000, "nights": 7, "guests_adults": 2, "children_ages": [], "pets": False}
+    assert c.params_patch(req, 50000, 7, 2, "", False)[0] == {}
+    assert c.params_patch(req, 50000, 7, 2, "", True)[0] == {"pets": True}
+    assert c.params_patch({**req, "pets": True}, 50000, 7, 2, "", False)[0] == {"pets": False}
+    assert c.params_patch(req, 50000, 7, 2, "")[0] == {}  # переключатель не передан
+
+
+def test_no_solution_keeps_only_trip_and_no_variants_lines() -> None:
+    text = ("Поездка: 01.11–08.11, 7 ночей.\nИзменил: Район: Хоста → Дагомыс.\n"
+            "Дагомыс: нет вариантов до 50 000 ₽. Поднять бюджет или посмотреть другой район?")
+    assert c.no_solution_lines(text) == ["Поездка: 01.11–08.11, 7 ночей.", "Дагомыс: нет вариантов до 50 000 ₽"]
+    assert c.no_solution_lines("") == [] and c.no_solution_lines(None) == []

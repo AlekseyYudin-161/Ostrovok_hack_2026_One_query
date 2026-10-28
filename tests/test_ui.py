@@ -45,3 +45,20 @@ def test_confirm_screen_has_yes_no():
     at.run()
     assert not at.exception
     assert [b.label for b in at.button] == ["Да", "Нет"]
+
+
+def test_results_show_agent_question_and_changes() -> None:
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.query_params["screen"] = "results"
+    at.run()
+    assert not at.exception
+    page = _text(at)
+    assert "Вопрос агента" in page and "Оформить вариант 3" in page and "Изменил: Даты" in page
+
+
+def test_paid_screen_keeps_chat_input() -> None:
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.query_params["screen"] = "paid"
+    at.run()
+    assert not at.exception
+    assert len(at.chat_input) == 1
