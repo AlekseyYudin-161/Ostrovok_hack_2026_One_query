@@ -175,6 +175,7 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
 [data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
 /* нижняя панель по ширине совпадает с контентной областью (.block-container) */
 [data-testid="stBottomBlockContainer"] {{ max-width:1040px !important; width:100%; padding:8px 24px 24px !important; margin:0 auto; }}
+[data-testid="stMain"], section.main {{ overflow-anchor:none; }}  /* браузер не «дотягивает» прокрутку к нижним карточкам */
 .st-key-metrics-link {{ margin-top:4px; }}
 .st-key-metrics-link [data-testid="stPageLink"] {{ justify-content:center; }}
 .st-key-metrics-link [data-testid="stPageLink"] a {{ background:transparent; padding:4px 8px; }}

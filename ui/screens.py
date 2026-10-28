@@ -33,14 +33,14 @@ def scroll_top() -> None:
     Иначе после ответа агента пользователь остаётся внизу у последней карточки, а «Поездка / Изменил» уходят из виду."""
     if not st.session_state.pop("_scroll_top", False):
         return
-    n = st.session_state["_scroll_n"] = st.session_state.get("_scroll_n", 0) + 1
+    n = st.session_state["_scroll_n"] = st.session_state.get("_scroll_n", 0) + 1  # счётчик: одинаковый компонент Streamlit не перезапускает
     js = c.scroll_top_js(n)
-    try:
-        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
-    except TypeError:  # старый Streamlit без выполнения JS в st.html: скрипт в iframe, поэтому идём через window.parent
+    try:  # скрипт в iframe компонента, поэтому работаем с родительской страницей
         import streamlit.components.v1 as components
 
-        components.html(f"<script>{js.replace('document,window', 'window.parent.document,window.parent')}</script>", height=0)
+        components.html(f"<script>{js.replace('(document,window)', '(window.parent.document,window.parent)')}</script>", height=0)
+    except Exception:  # noqa: BLE001 - компонент недоступен в этой версии Streamlit: скрипт прямо в страницу
+        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
 
 
 def S(key: str, default=None):
@@ -72,6 +72,7 @@ def run_agent(text: str, patch: dict | None = None) -> None:
     md(c.head())
     md(c.stepper(0))
     md(c.query_card(text))
+    scroll_top()  # сразу, до долгого ответа агента: размышления видны с первой секунды
     ph = st.empty()
     prev = S("answer")
     res = asyncio.run(_consume(text, patch, ph))
@@ -103,6 +104,7 @@ def run_agent(text: str, patch: dict | None = None) -> None:
 
 
 def submit(text: str, patch: dict | None = None) -> None:
+    st.session_state._scroll_top = True  # любой ввод/правка запроса: экран «Агент работает» открываем сверху
     st.session_state.query = text
     st.session_state.screen = "working"
     st.session_state.pending = (text, patch)

@@ -325,13 +325,16 @@ def trip_header(text: str | None, assumptions: list[dict], changes: list[str] | 
 
 def scroll_top_js(n: int) -> str:
     """JS «показать верх страницы». n меняется при каждом вызове, чтобы Streamlit выполнил скрипт заново.
-    Прокручивается контейнер страницы Streamlit (в разных версиях у него разные селекторы), повтор через
-    пару долей секунды нужен, если страница ещё дорисовывается."""
-    js = """(function(d,w){ var up=function(){
-  ['[data-testid="stMain"]','section.main','.main','[data-testid="stAppViewContainer"]'].forEach(function(s){
-    var e=d.querySelector(s); if(e){ e.scrollTop=0; } });
-  w.scrollTo(0,0); };
-  up(); setTimeout(up,150); setTimeout(up,500); })(document,window);"""
+    Прокручивается контейнер страницы Streamlit (в разных версиях у него разные селекторы), повторяется
+    ~1,5 секунды, пока страница дорисовывается (фото, длинный ответ), и прекращается, если пользователь сам начал листать."""
+    js = """(function(d,w){ var stop=false;
+  var up=function(){ if(stop){ return; }
+    var h=d.querySelector('.od-head'); if(h && h.scrollIntoView){ h.scrollIntoView({block:'start'}); }
+    ['[data-testid="stMain"]','section.main','.main','[data-testid="stAppViewContainer"]'].forEach(function(s){
+      var e=d.querySelector(s); if(e){ e.scrollTop=0; } });
+    w.scrollTo(0,0); };
+  ['wheel','touchstart','keydown'].forEach(function(t){ w.addEventListener(t,function(){ stop=true; },{once:true,passive:true}); });
+  up(); var i=0; var t=setInterval(function(){ up(); i++; if(i>15||stop){ clearInterval(t); } },100); })(document,window);"""
     return f"/* {n} */ " + js
 
 
