@@ -42,12 +42,12 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 
 /* карточки */
 .od-glass {{ background:#fff; border:1px solid #E8E8ED; box-shadow:0 1px 2px rgba(20,30,60,.04),0 8px 24px rgba(20,30,60,.04);
-  border-radius:28px; padding:22px 24px; transition:box-shadow .15s, border-color .15s; }}
+  border-radius:24px; padding:24px; transition:box-shadow .15s, border-color .15s; }}
 .od-glass.tight {{ padding:10px; }}
 .od-glass.rec {{ border:2px solid {GREEN}; }}
 .od-glass.dim {{ opacity:.7; }}
 .od-head {{ background:#fff; border:1px solid #E8E8ED;
-  border-radius:22px; padding:12px 14px 12px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px; }}
+  border-radius:24px; padding:12px 14px 12px 24px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; gap:16px; }}
 .od-logo {{ font-weight:700; font-size:21px; letter-spacing:-.4px; color:{TEXT}; }}
 .od-logo b {{ color:{BLUE}; }}
 .od-h1 {{ margin:0; font-size:56px; line-height:1.05; font-weight:700; letter-spacing:-2px; text-align:center; }}
@@ -68,7 +68,7 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 .od-chip.white {{ background:#fff; border:1px solid #E5E5EA; }}
 
 /* степпер */
-.od-steps {{ display:flex; align-items:center; gap:12px; padding:0 8px; }}
+.od-steps {{ display:flex; align-items:center; gap:12px; padding:0 8px; margin:8px 0 16px; }}
 .od-step {{ display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:#86868B; }}
 .od-step i {{ width:26px; height:26px; border-radius:50%; background:#E9E9EE; color:#86868B; font-style:normal; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }}
 .od-step.now {{ color:{TEXT}; }} .od-step.now i {{ background:{BLUE}; color:#fff; }}
@@ -76,7 +76,7 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 .od-line {{ flex:1; height:2px; min-width:20px; background:#E5E5EA; border-radius:2px; }}
 
 /* фото и строки */
-.od-cover {{ position:relative; height:170px; border-radius:20px; overflow:hidden; background:#E5E5EA; }}
+.od-cover {{ position:relative; height:170px; border-radius:14px; overflow:hidden; background:#E5E5EA; }}
 .od-cover img {{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }}
 .od-badge {{ position:absolute; top:12px; left:12px; background:rgba(255,255,255,.92); color:#14161F; font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; }}
 .od-badge.green {{ background:{GREEN}; color:{GREEN_TEXT}; }}
@@ -104,11 +104,11 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 .od-bar {{ height:8px; border-radius:8px; background:#E5E5EA; overflow:hidden; }}
 .od-bar > div {{ height:100%; border-radius:8px; background:linear-gradient(90deg,{BLUE},#5B85F0); transition:width .3s; }}
 .od-bubble-user {{ margin-left:auto; max-width:620px; background:{BLUE}; color:#fff; border-radius:24px 24px 6px 24px; padding:16px 20px; font-size:16px; line-height:1.45; width:fit-content; }}
-.od-cta {{ background:linear-gradient(135deg,#2A5FEA 0%,{BLUE} 55%,#0A2F9E 100%); border-radius:36px; padding:44px 48px; color:#fff; }}
+.od-cta {{ background:linear-gradient(135deg,#2A5FEA 0%,{BLUE} 55%,#0A2F9E 100%); border-radius:24px; padding:40px 48px; color:#fff; }}
 
 /* кнопки Streamlit: только синие. Состояния: hover, active, focus-visible, disabled */
 .stButton > button, .stDownloadButton > button, [data-testid="stFormSubmitButton"] > button {{
-  border-radius:16px; font-weight:700; font-size:15px; padding:.65rem 1.3rem; border:0; box-shadow:none;
+  border-radius:14px !important; min-height:46px; font-weight:700; font-size:15px; padding:.6rem 1.4rem; border:0; box-shadow:none;
   background:{BLUE_TINT}; color:{BLUE}; transition:background .15s, transform .08s, box-shadow .15s; }}
 .stButton > button:hover {{ background:#DAE4FC; color:{BLUE_HOVER}; border:0; }}
 .stButton > button:active {{ background:#C9D7FA; color:{BLUE_HOVER}; transform:scale(.98); }}
@@ -126,18 +126,24 @@ header[data-testid="stHeader"], footer, #MainMenu {{ display:none !important; }}
 [class*="st-key-main"] .stButton > button:active {{ background:{BLUE_PRESSED}; }}
 
 /* поля ввода */
-.stTextArea textarea, .stNumberInput input, .stTextInput input, .stDateInput input, [data-baseweb="select"] > div {{
-  border-radius:14px; background:#fff; border:1.5px solid #D1D1D6; transition:border-color .15s, box-shadow .15s; }}
-.stTextArea textarea:hover, .stNumberInput input:hover, .stTextInput input:hover, [data-baseweb="select"] > div:hover {{ border-color:#AEAEB2; }}
-.stTextArea textarea:focus, .stNumberInput input:focus, .stTextInput input:focus, .stDateInput input:focus {{
-  border-color:{BLUE}; box-shadow:0 0 0 4px rgba(13,65,210,.16); outline:none; }}
-.stTextArea textarea:disabled, .stNumberInput input:disabled, .stTextInput input:disabled {{ background:#F2F2F7; color:#AEAEB2; border-color:#E5E5EA; }}
-.stTextArea textarea[aria-invalid="true"], .stNumberInput input[aria-invalid="true"], .stTextInput input[aria-invalid="true"] {{
-  border-color:#D93025; box-shadow:0 0 0 4px rgba(217,48,37,.12); }}
+[data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {{
+  border-radius:14px !important; background:#fff !important; border:1.5px solid #D1D1D6 !important; min-height:46px;
+  overflow:hidden; transition:border-color .15s, box-shadow .15s; }}
+[data-baseweb="input"] input, [data-baseweb="base-input"] input, [data-baseweb="textarea"] textarea {{
+  border:0 !important; border-radius:0 !important; background:transparent !important; box-shadow:none !important; }}
+[data-baseweb="input"]:hover, [data-baseweb="textarea"]:hover, [data-baseweb="select"] > div:hover {{ border-color:#AEAEB2 !important; }}
+[data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within {{
+  border-color:{BLUE} !important; box-shadow:0 0 0 4px rgba(13,65,210,.16) !important; }}
+/* шаг +/− у числовых полей: спокойные серые, на hover — светло-синяя подложка, не синяя заливка */
+[data-testid="stNumberInputStepUp"], [data-testid="stNumberInputStepDown"] {{
+  background:transparent !important; color:#6C6C70 !important; border-radius:12px !important; min-height:46px; }}
+[data-testid="stNumberInputStepUp"]:hover, [data-testid="stNumberInputStepDown"]:hover {{ background:{BLUE_TINT} !important; color:{BLUE} !important; }}
+[data-testid="stNumberInputStepUp"]:active, [data-testid="stNumberInputStepDown"]:active {{ background:#D3DFFB !important; }}
+[data-baseweb="input"]:has(input:disabled), [data-baseweb="textarea"]:has(textarea:disabled) {{ background:#F2F2F7 !important; border-color:#E5E5EA !important; }}
+[data-baseweb="input"]:has(input[aria-invalid="true"]), [data-baseweb="textarea"]:has(textarea[aria-invalid="true"]) {{
+  border-color:#D93025 !important; box-shadow:0 0 0 4px rgba(217,48,37,.12) !important; }}
 .stTextArea textarea {{ font-size:17px; }}
-[data-testid="stNumberInput"] button {{ color:{BLUE}; }}
-[data-testid="stNumberInput"] button:hover {{ background:#F0F3FE; }}
-[data-testid="stNumberInput"] button:disabled {{ color:#C7C7CC; }}
+[data-testid="stNumberInput"] button:disabled {{ color:#C7C7CC !important; }}
 label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transition:background .15s, border-color .15s; }}
 [data-testid="stCheckbox"] label:hover span:first-child, [data-testid="stRadio"] label:hover > div:first-child {{ border-color:{BLUE}; }}
 
@@ -151,12 +157,22 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
 [data-baseweb="tab-highlight"] {{ background:{BLUE}; height:2.5px; }}
 [data-baseweb="tab-border"] {{ display:none; }}
 
-[data-testid="stChatInput"] > div {{ background:#fff; border:1.5px solid #E5E5EA; border-radius:22px; box-shadow:0 8px 24px rgba(20,30,60,.06); transition:border-color .15s, box-shadow .15s; }}
+[data-testid="stChatInput"] > div {{ background:#fff; border:2px solid #DCE3F7; border-radius:20px; min-height:60px;
+  box-shadow:0 2px 6px rgba(20,30,60,.06), 0 16px 36px rgba(13,65,210,.12); transition:border-color .15s, box-shadow .15s; }}
+[data-testid="stBottom"] > div, [data-testid="stBottomBlockContainer"] {{ background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%) !important; }}
+/* первый экран: поле поиска стоит под заголовком, а не прижато к низу */
+.st-key-hero-search {{ max-width:760px; margin:8px auto 0; padding:10px; border-radius:28px;
+  background:linear-gradient(180deg,#FFFFFF 0%,#EAF0FF 100%); border:1px solid #E3EAFB; box-shadow:0 18px 44px rgba(13,65,210,.14); }}
+[data-testid="stChatInput"] [data-baseweb="textarea"] {{ border:0 !important; box-shadow:none !important; min-height:0; border-radius:0 !important; overflow:visible; }}
 [data-testid="stChatInput"] > div:hover {{ border-color:#C7C7CC; }}
 [data-testid="stChatInput"] > div:focus-within {{ border-color:{BLUE}; box-shadow:0 0 0 4px rgba(13,65,210,.16); }}
-[data-testid="stChatInput"] button {{ background:{BLUE}; color:#fff; border-radius:14px; }}
+[data-testid="stChatInput"] button {{ background:{BLUE}; color:#fff; border-radius:12px; }}
 [data-testid="stChatInput"] button:disabled {{ background:#C5D0F3; }}
-[data-testid="stExpander"] {{ background:#fff; border:1px solid #E8E8ED; border-radius:24px; }}
+[data-testid="stExpander"], [data-testid="stExpander"] details {{ background:#fff !important; border:1px solid #E8E8ED !important; border-radius:24px !important;
+  overflow:hidden; box-shadow:0 1px 2px rgba(20,30,60,.04), 0 8px 24px rgba(20,30,60,.04); }}
+[data-testid="stExpander"] details {{ border:0 !important; box-shadow:none; }}
+[data-testid="stExpander"] summary {{ padding:16px 24px; font-weight:600; background:transparent !important; }}
+[data-testid="stExpanderDetails"] {{ padding:4px 24px 24px; }}
 .od-glass.hover:hover, a.od-glass:hover {{ box-shadow:0 2px 4px rgba(20,30,60,.05),0 16px 36px rgba(20,30,60,.10); }}
 .od-glass.sel {{ border:2px solid {BLUE}; }}
 @media (max-width:760px) {{ .od-h1 {{ font-size:38px; }} .block-container {{ padding:12px 12px 96px; }} .od-steps .od-step span {{ display:none; }} }}

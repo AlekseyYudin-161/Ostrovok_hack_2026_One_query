@@ -110,6 +110,9 @@ def start() -> None:
     md('<div style="text-align:center;padding:44px 0 8px"><span class="od-chip green" style="margin:0">AI-агент для путешествий</span>'
        '<h1 class="od-h1" style="margin-top:18px">Один запрос,<br>и вся поездка <span class="od-mark">готова</span></h1>'
        '<p class="od-muted" style="font-size:18px;max-width:620px;margin:18px auto 0">Напишите, куда и когда хотите поехать. Агент подберёт район, отель, дорогу и трансфер и проверит, что всё стыкуется по времени.</p></div>')
+    with st.container(key="hero-search"):  # поле поиска под заголовком (внутри контейнера chat_input не прижимается к низу)
+        if prompt := st.chat_input("Куда хотите поехать?"):
+            submit(prompt)
     cols = st.columns(len(demo.EXAMPLES))
     for col, ex in zip(cols, demo.EXAMPLES, strict=True):
         if col.button(ex, key=f"ex-{ex}", use_container_width=True):
@@ -342,4 +345,4 @@ def none() -> None:
 
 
 SCREENS = {"start": start, "clarify": clarify, "areas": areas, "results": results, "diff": diff, "cart": cart, "confirm": confirm, "paid": paid, "none": none}
-CHAT_SCREENS = {"start", "clarify", "areas", "results", "diff", "none", "confirm"}
+CHAT_SCREENS = {"clarify", "areas", "results", "diff", "none", "confirm"}  # внизу страницы; на старте поле под заголовком
