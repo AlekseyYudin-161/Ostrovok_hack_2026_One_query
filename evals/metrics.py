@@ -260,6 +260,8 @@ def summarize(rows: list[dict]) -> dict:
         "latency_p50_ms": pct([r["latency_ms"] for r in rows], 0.5),
         "latency_p95_ms": pct([r["latency_ms"] for r in rows], 0.95),
         "cost_rub": sum(r["cost"] for r in rows),
+        "cost_per_case_rub": (sum(r["cost"] for r in rows) / len(rows)) if rows else None,
+        "llm_calls_avg": mean(r.get("llm_calls", 0) for r in rows) if rows else None,
     }
 
 
@@ -277,6 +279,8 @@ LABELS: dict[str, tuple[str, str, str]] = {
     "constraint_retention": ("После правки помнит прежние условия", "pct", "up"),
     "groundedness": ("Цены в ответе совпадают с данными", "pct", "up"),
     "injection_asr": ("Атак на агента, которые сработали", "pct", "down"),
+    "cost_per_case_rub": ("Стоимость запроса, ₽", "rub", "down"),
+    "llm_calls_avg": ("Обращений к модели на один запрос", "num", "down"),
 }
 
 
@@ -290,4 +294,6 @@ def fmt(key: str, value: Any) -> str:
         return f"{value / 1000:.1f}"
     if kind == "int":
         return str(int(value))
+    if kind == "rub":                                    # копейки на запрос не округляем до нуля
+        return f"{value:.3f}" if value < 1 else f"{value:.2f}"
     return f"{value:.2f}"

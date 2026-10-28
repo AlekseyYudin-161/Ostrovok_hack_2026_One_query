@@ -39,6 +39,10 @@ report = json.loads(REPORT.read_text(encoding="utf-8"))
 meta, summary = report["meta"], report["summary"]
 st.caption(f"Прогон {meta['finished_at'][:16].replace('T', ' ')} UTC · кейсов: {summary['cases']} · "
            f"модель: {meta.get('model') or meta['llm']} · все данные — демо")
+if summary.get("cost_rub"):
+    st.caption(f"Стоимость прогона: {summary['cost_rub']:.2f} ₽ · на один запрос: "
+               f"{fmt('cost_per_case_rub', summary.get('cost_per_case_rub'))} ₽ · обращений к модели на запрос: "
+               f"{fmt('llm_calls_avg', summary.get('llm_calls_avg'))}")
 
 
 def tiles(keys: tuple[str, ...], data: dict) -> None:
@@ -74,6 +78,8 @@ for case in failed:
     with st.expander(f"{case['case_id']} — {case['query'][:80]}"):
         for reason in case["reasons"]:
             st.write(f"- {reason}")
+        if case.get("trace_url"):
+            st.markdown(f"[Открыть трейс в Langfuse]({case['trace_url']})")
         for turn in case["turns"]:
             st.caption(f"{turn['kind']}: «{turn['text'][:120]}» → {MODE_RU.get(turn['mode'], turn['mode'])}, "
                        f"{turn['ms']} мс")

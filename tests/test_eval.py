@@ -182,3 +182,21 @@ def test_chat_seed_checks_month_and_no_solution() -> None:
     month = {cid: [h.value for h in seed[cid].hard_constraints if h.key == "month"] for cid in seed}
     assert month["chat-01-turkey"] == [5] and month["chat-03-spb"] == [1]
     assert seed["chat-02-sochi"].expected_mode == AgentMode.NO_SOLUTION
+
+
+def test_cost_and_trace_from_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """agent-v3: payload.usage по каждому ходу → стоимость кейса; trace_id → ссылка (без ключей Langfuse — None)."""
+    from evals import runner
+
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    offer = {"mode": "confirm_action", "text": "ok", "itineraries": [_itinerary()]}
+    turns = [Turn("query", "Адлер", 7, offer, {"destination": "Адлер"},
+                  usage={"tokens_in": 900, "tokens_out": 120, "llm_calls": 1, "cost_rub": 0.42}, trace_id="t1"),
+             Turn("confirm", "да", 3, {"mode": "purchased", "text": "Готово"}, {},
+                  usage={"tokens_in": 0, "tokens_out": 0, "llm_calls": 0, "cost_rub": 0.0})]
+    row = score(_case(), turns, "dev")
+    assert row["cost"] == pytest.approx(0.42) and row["llm_calls"] == 1 and row["tokens_in"] == 900
+    assert row["trace_url"] is None and runner.trace_url(None) is None
+    assert row["turns"][0]["trace_id"] == "t1"
+    summary = metrics.summarize([row, {**row, "cost": 0.58}])
+    assert summary["cost_rub"] == pytest.approx(1.0) and summary["cost_per_case_rub"] == pytest.approx(0.5)
