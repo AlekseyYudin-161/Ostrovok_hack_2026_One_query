@@ -180,3 +180,78 @@ async def test_injection_note_in_assumptions(planner: TripPlanner) -> None:
     assert run.answer.mode.value == "confirm_action" and run.answer.itineraries
     first = run.answer.assumptions[0]
     assert first.field == "security" and first.reason.startswith("Часть сообщения похожа")
+
+
+# ---------- agent-v7: поправить любое допущение — район, даты, взрослых, город отправления ----------
+@pytest.mark.asyncio
+async def test_fix_every_assumption(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=date(2026, 10, 28), planner=planner)
+    run = await agent.run("Сочи на неделю", "s-fix")
+    assert any(a.reason.startswith("Город отправления") for a in run.answer.assumptions)
+    area = await agent.run("давай в Хосте", "s-fix")                # на паузе: правка, а не «да»
+    assert area.request.destination == "Хоста"
+    assert area.answer.changes == [f"Район: {run.request.destination} → Хоста"]
+    dates = await agent.run("с 14 ноября", "s-fix")
+    assert dates.answer.changes == ["Даты: 06.11–13.11 → 14.11–21.11"] and dates.request.nights == 7
+    adults = await agent.run("нас трое", "s-fix")
+    assert adults.answer.changes == ["Взрослых: 2 → 3"]
+    origin = await agent.run("едем из Казани", "s-fix")
+    assert origin.answer.changes == ["Откуда: Москва → Казань"] and origin.request.origin_city == "Казань"
+    assert not origin.answer.assumptions
+    later = await agent.run("а если на 2 дня позже?", "s-fix")     # прежние правки не теряются
+    assert later.request.origin_city == "Казань" and later.request.guests_adults == 3
+    assert later.request.destination == "Хоста"
+
+
+def test_origin_last_mention() -> None:
+    from harness.trip import origin_from_text
+    assert origin_from_text("Адлер из Москвы | нет, из Казани") == "Казань"
+
+
+@pytest.mark.asyncio
+async def test_variant_pick_is_not_change(planner: TripPlanner) -> None:
+    agent, _run, word, _k = await _offer(planner, "s-pick7")
+    ask = await agent.run(f"давай {word}", "s-pick7")               # название отеля — по-прежнему выбор
+    assert ask.answer.mode.value == "purchased"
+
+
+@pytest.mark.asyncio
+async def test_adults_fallback_when_llm_misses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Модель на «нас трое» вернула adults=None — число взрослых берём по правилам."""
+    import harness.agent_graph as ag
+    from harness.agent_graph import Understood, understand_text
+
+    async def fake_structured(*_a, **_k):
+        return Understood()
+    monkeypatch.setattr(ag, "structured", fake_structured)
+    assert (await understand_text(object(), "нас трое", TODAY)).adults == 3
+    assert (await understand_text(object(), "Сочи на неделю", TODAY)).adults is None
+
+
+# ---------- agent-v8: у вариантов разные отели; «не предоставляется» — не кнопка ----------
+def _req_khosta():
+    from harness.contracts import TripRequest
+    return TripRequest(raw_text="Хоста", destination="Хоста", checkin=date(2026, 11, 14),
+                       checkout=date(2026, 11, 21), nights=7, guests_adults=2)
+
+
+def test_variants_have_distinct_hotels(planner: TripPlanner, monkeypatch: pytest.MonkeyPatch) -> None:
+    def same_hotel(req, hotels, today, kids, meal):              # скоринг выбрал один отель на все варианты
+        return {label: [hotels[0]] for label in ("balanced", "cheapest", "most_comfortable")}
+    monkeypatch.setattr(planner, "_pick_hotels", same_hotel)
+    plan = planner.plan(_req_khosta(), TODAY)
+    names = [it.hotel.hotel.name for it in plan.itineraries]
+    assert len(names) == 3 and len(set(names)) == 3, names
+    assert plan.itineraries[1].hotel.hotel.hotel_id == plan.hotels[0].hotel.hotel_id   # «Дешевле» — самый дешёвый
+    comfy, balanced = plan.itineraries[2].hotel, plan.itineraries[0].hotel
+    assert (comfy.hotel.rating or 0) >= (balanced.hotel.rating or 0)  # «Комфортно» не хуже «Оптимально» по рейтингу
+
+
+def test_unavailable_fix_is_not_a_button(planner: TripPlanner) -> None:
+    from harness.contracts import ConnectionCheck
+    hid = next(h.hotel_id for h in planner.cat.hotels.values() if h.late_checkout_fee is None)
+    c = ConnectionCheck(rule="checkout_vs_departure", ok=True, severity="warning", message="Ждать ≈8 ч.",
+                        fixes=["запросить поздний выезд", "оставить багаж в отеле"])
+    out = planner._priced_fixes(c, hid)
+    assert out.fixes == ["оставить багаж в отеле"]
+    assert out.message == "Ждать ≈8 ч. Поздний выезд в этом отеле не предоставляется."
