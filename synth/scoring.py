@@ -25,6 +25,8 @@ DEFAULT_WEIGHTS = {"price": .30, "quality": .20, "location": .15, "cancellation"
                    "travel_time": .05, "fit": .15, "level": .05}
 COMFORT_WEIGHTS = {"price": .10, "quality": .20, "location": .15, "cancellation": .05, "meal": .05,
                    "travel_time": .05, "fit": .10, "level": .30}
+# С детьми «комфортно» — это ещё и детские удобства (они в fit), а не только класс отеля
+COMFORT_KIDS_WEIGHTS = {**COMFORT_WEIGHTS, "fit": .20, "level": .20}
 CRITERIA = tuple(DEFAULT_WEIGHTS)
 
 # Отмена: чем ПОЗЖЕ можно отменить бесплатно, тем гибче («за 1 день» лучше, чем «за 14 дней»).
@@ -35,6 +37,8 @@ MEAL_RU = {"none": "без питания", "breakfast": "завтрак", "half
 RATING_PRIOR, RATING_PRIOR_N = 7.9, 30       # байесовская поправка: 9.8 при 5 отзывах ≈ 8.2, при 500 ≈ 9.7
 SEA_SCALE_M, LIFT_SCALE_M, TRANSFER_SCALE_MIN = 400, 600, 45
 KIDS_AMENITIES = {"kids_club", "playground", "kids_pool", "aquapark", "babysitting"}
+KIDS_RU = {"kids_club": "детский клуб", "playground": "детская площадка", "kids_pool": "детский бассейн",
+           "aquapark": "аквапарк", "babysitting": "няня"}
 LEVEL_BY_TYPE = {"guest_house": .30, "apartments": .45, "glamping": .55, "sanatorium": .50, "resort": .85}
 LEVEL_BY_STARS = {1: .25, 2: .35, 3: .50, 4: .75, 5: .95}
 LEVEL_AMENITIES = {"pool", "heated_pool", "indoor_pool", "spa", "restaurant", "room_service", "gym", "private_beach"}
@@ -209,8 +213,8 @@ def _wish_u(h: Hotel, wish: str, zone: str) -> tuple[float | None, str | None, s
     if w in ("с детьми", "дети"):
         kids = KIDS_AMENITIES & am
         u = min(.3 + .25 * len(kids) + (.2 if "для семей с детьми" in tags else 0) + .2 * asp.get("kids", 0), 1.0)
-        pro = ("для детей: " + ", ".join(sorted(kids)).replace("_", " ")) if kids else None
-        return max(u, 0.0), pro, ("для детей почти ничего нет" if not kids else None)
+        pro = ("для детей: " + ", ".join(sorted(KIDS_RU[k] for k in kids))) if kids else None
+        return max(u, 0.0), pro, ("детских удобств нет" if not kids else None)
     if w == "тихо":
         noise = asp.get("noise", 0)
         u = .5 + (.3 if tags & {"тихо", "уединённо"} else 0) - (.3 if "тусовка рядом" in tags else 0) + .3 * noise
@@ -316,6 +320,7 @@ def pick_variants(cat: Catalog, offers: list[HotelOffer], ctx: ScoreContext) -> 
     most_comfortable — лучший при «комфортных» весах среди отелей классом выше balanced (level ≥ +0.2: гостевой
     дом → отель 3★+, 3★ → 4★…) и не дороже ×3 от него — без «люкса в 8 раз дороже». Таких нет — лучший при
     комфортных весах в пределах ×3, по возможности другой отель (не хуже 95 % лучшего), чтобы было из чего выбрать.
+    С детьми «комфортно» сильнее учитывает детские удобства и среди отелей классом выше берёт те, где они есть.
     """
     if not offers:
         return {}
@@ -327,10 +332,13 @@ def pick_variants(cat: Catalog, offers: list[HotelOffer], ctx: ScoreContext) -> 
     level = {s.offer.offer_id: s.parts["level"] for s in balanced}
     upper = [o for o in affordable if level[o.offer_id] >= level[best.offer.offer_id] + LEVEL_STEP]
     cheapest = min(balanced, key=lambda s: (s.offer.price_total, -s.score, s.hotel_id))
+    comfort_w = COMFORT_KIDS_WEIGHTS if ctx.children_ages else COMFORT_WEIGHTS
+    if ctx.children_ages:
+        upper = [o for o in upper if KIDS_AMENITIES & set(cat.hotels[o.hotel.hotel_id].amenities)] or upper
     if upper:
         return {"cheapest": cheapest, "balanced": best,
-                "most_comfortable": score_hotels(cat, upper, ctx, COMFORT_WEIGHTS, p_min)[0]}
-    comfort = score_hotels(cat, affordable, ctx, COMFORT_WEIGHTS, p_min)
+                "most_comfortable": score_hotels(cat, upper, ctx, comfort_w, p_min)[0]}
+    comfort = score_hotels(cat, affordable, ctx, comfort_w, p_min)
     alt = next((s for s in comfort if s.hotel_id not in (best.hotel_id, cheapest.hotel_id)
                 and s.score >= DISTINCT_WITHIN * comfort[0].score), None)
     return {"cheapest": cheapest, "balanced": best, "most_comfortable": alt or comfort[0]}
