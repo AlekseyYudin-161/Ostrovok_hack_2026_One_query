@@ -123,3 +123,37 @@ async def test_plain_yes_still_buys_first(planner: TripPlanner) -> None:
     agent, run, _, _ = await _offer(planner, "s-yes")
     bought = await agent.run("да", "s-yes")
     assert bought.answer.itineraries[0].total_price == run.answer.itineraries[0].total_price
+
+
+# ---------- agent-v5: «Почему» полем варианта, допущение по взрослым — в запросе ----------
+@pytest.mark.asyncio
+async def test_why_is_itinerary_field(planner: TripPlanner, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(planner, "why", lambda its, req, today: {it.label: [f"плюс {it.label}"] for it in its})
+    run = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run("Адлер на неделю", "s-why")
+    assert run.answer.itineraries and all(it.why == [f"плюс {it.label}"] for it in run.answer.itineraries)
+    assert "Почему: плюс balanced." in run.answer.text                      # в тексте — то же самое
+    bought = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run("Адлер на неделю", "s-why2")
+    assert bought.answer.itineraries[0].why
+
+
+@pytest.mark.asyncio
+async def test_assumed_adults_in_request(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    run = await agent.run("Адлер на неделю", "s-adults")
+    assert run.request.guests_adults == 2 and "2 взрослых" in run.answer.text
+    assert "Считаю на 2 взрослых" in run.answer.text                        # допущение по-прежнему видно
+    same = await agent.run("а если на 2 дня позже?", "s-adults")
+    assert same.request.guests_adults == 2 and not any("Взрослых" in c for c in same.answer.changes)
+    named = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run("Адлер на неделю, едем вчетвером, четверо взрослых", "s-ad4")
+    assert named.request.guests_adults == 4
+
+
+@pytest.mark.asyncio
+async def test_no_with_variant_is_a_choice(planner: TripPlanner) -> None:
+    agent, run, _, _ = await _offer(planner, "s-no3")
+    ask = await agent.run("нет, вариант 3", "s-no3")              # «нет, вариант 3» — не отказ, а выбор варианта 3
+    assert ask.answer.mode.value == "confirm_action" and ask.answer.text.startswith("Оформить вариант 3")
+    bought = await agent.run("да", "s-no3")
+    assert bought.answer.itineraries[0].total_price == run.answer.itineraries[2].total_price
+    agent2, _, _, _ = await _offer(planner, "s-no")
+    assert (await agent2.run("нет", "s-no")).answer.text.startswith("Хорошо, не оформляю")

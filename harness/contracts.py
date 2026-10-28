@@ -183,6 +183,7 @@ class Itinerary(BaseModel):
     total_price: float = 0.0
     checks: list[ConnectionCheck] = []
     tradeoffs: list[Tradeoff] = []
+    why: list[str] = []                      # почему выбран отель: плюсы и минусы по скорингу ML («первая линия»)
     label: Literal["balanced", "cheapest", "most_comfortable", "custom"] = "balanced"
 
 
