@@ -1,0 +1,362 @@
+[
+ {
+  "zone": "coast",
+  "month": 1,
+  "air_day_c": 11.0,
+  "air_night_c": 4.0,
+  "sea_c": 10.0,
+  "rain_days": 15,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 1,
+  "air_day_c": 11.0,
+  "air_night_c": 3.0,
+  "sea_c": 10.0,
+  "rain_days": 14,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 1,
+  "air_day_c": 3.0,
+  "air_night_c": -5.0,
+  "sea_c": null,
+  "rain_days": 16,
+  "ski_open": true,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 2,
+  "air_day_c": 11.0,
+  "air_night_c": 4.0,
+  "sea_c": 9.0,
+  "rain_days": 13,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 2,
+  "air_day_c": 11.0,
+  "air_night_c": 3.0,
+  "sea_c": 9.0,
+  "rain_days": 12,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 2,
+  "air_day_c": 4.0,
+  "air_night_c": -4.0,
+  "sea_c": null,
+  "rain_days": 15,
+  "ski_open": true,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 3,
+  "air_day_c": 13.0,
+  "air_night_c": 6.0,
+  "sea_c": 10.0,
+  "rain_days": 13,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 3,
+  "air_day_c": 13.0,
+  "air_night_c": 5.0,
+  "sea_c": 10.0,
+  "rain_days": 12,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 3,
+  "air_day_c": 8.0,
+  "air_night_c": -1.0,
+  "sea_c": null,
+  "rain_days": 16,
+  "ski_open": true,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 4,
+  "air_day_c": 17.0,
+  "air_night_c": 9.0,
+  "sea_c": 12.0,
+  "rain_days": 12,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 4,
+  "air_day_c": 17.0,
+  "air_night_c": 8.0,
+  "sea_c": 12.0,
+  "rain_days": 11,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 4,
+  "air_day_c": 14.0,
+  "air_night_c": 4.0,
+  "sea_c": null,
+  "rain_days": 14,
+  "ski_open": true,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 5,
+  "air_day_c": 21.0,
+  "air_night_c": 13.0,
+  "sea_c": 17.0,
+  "rain_days": 10,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 5,
+  "air_day_c": 21.0,
+  "air_night_c": 12.0,
+  "sea_c": 17.0,
+  "rain_days": 9,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 5,
+  "air_day_c": 19.0,
+  "air_night_c": 8.0,
+  "sea_c": null,
+  "rain_days": 14,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 6,
+  "air_day_c": 25.0,
+  "air_night_c": 17.0,
+  "sea_c": 22.0,
+  "rain_days": 8,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "imeretinka",
+  "month": 6,
+  "air_day_c": 25.0,
+  "air_night_c": 16.0,
+  "sea_c": 22.0,
+  "rain_days": 7,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "mountains",
+  "month": 6,
+  "air_day_c": 23.0,
+  "air_night_c": 12.0,
+  "sea_c": null,
+  "rain_days": 12,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 7,
+  "air_day_c": 28.0,
+  "air_night_c": 20.0,
+  "sea_c": 25.0,
+  "rain_days": 6,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "imeretinka",
+  "month": 7,
+  "air_day_c": 28.0,
+  "air_night_c": 19.0,
+  "sea_c": 25.0,
+  "rain_days": 5,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "mountains",
+  "month": 7,
+  "air_day_c": 26.0,
+  "air_night_c": 15.0,
+  "sea_c": null,
+  "rain_days": 10,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 8,
+  "air_day_c": 29.0,
+  "air_night_c": 20.0,
+  "sea_c": 26.0,
+  "rain_days": 6,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "imeretinka",
+  "month": 8,
+  "air_day_c": 29.0,
+  "air_night_c": 19.0,
+  "sea_c": 26.0,
+  "rain_days": 5,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "mountains",
+  "month": 8,
+  "air_day_c": 26.0,
+  "air_night_c": 15.0,
+  "sea_c": null,
+  "rain_days": 9,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 9,
+  "air_day_c": 25.0,
+  "air_night_c": 17.0,
+  "sea_c": 24.0,
+  "rain_days": 8,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "imeretinka",
+  "month": 9,
+  "air_day_c": 25.0,
+  "air_night_c": 16.0,
+  "sea_c": 24.0,
+  "rain_days": 7,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "mountains",
+  "month": 9,
+  "air_day_c": 22.0,
+  "air_night_c": 11.0,
+  "sea_c": null,
+  "rain_days": 10,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 10,
+  "air_day_c": 21.0,
+  "air_night_c": 13.0,
+  "sea_c": 20.0,
+  "rain_days": 10,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "imeretinka",
+  "month": 10,
+  "air_day_c": 21.0,
+  "air_night_c": 12.0,
+  "sea_c": 20.0,
+  "rain_days": 9,
+  "ski_open": false,
+  "swim_ok": true
+ },
+ {
+  "zone": "mountains",
+  "month": 10,
+  "air_day_c": 16.0,
+  "air_night_c": 6.0,
+  "sea_c": null,
+  "rain_days": 11,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 11,
+  "air_day_c": 16.0,
+  "air_night_c": 9.0,
+  "sea_c": 16.0,
+  "rain_days": 12,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 11,
+  "air_day_c": 16.0,
+  "air_night_c": 8.0,
+  "sea_c": 16.0,
+  "rain_days": 11,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 11,
+  "air_day_c": 10.0,
+  "air_night_c": 2.0,
+  "sea_c": null,
+  "rain_days": 13,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "coast",
+  "month": 12,
+  "air_day_c": 13.0,
+  "air_night_c": 6.0,
+  "sea_c": 13.0,
+  "rain_days": 15,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "imeretinka",
+  "month": 12,
+  "air_day_c": 13.0,
+  "air_night_c": 5.0,
+  "sea_c": 13.0,
+  "rain_days": 14,
+  "ski_open": false,
+  "swim_ok": false
+ },
+ {
+  "zone": "mountains",
+  "month": 12,
+  "air_day_c": 5.0,
+  "air_night_c": -3.0,
+  "sea_c": null,
+  "rain_days": 16,
+  "ski_open": true,
+  "swim_ok": false
+ }
+]

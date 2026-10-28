@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+.env
+**/__pycache__
+.pytest_cache
+.ruff_cache
+synth/raw
+synth/*.ipynb
+docs/ui/screens
+*.session
+.DS_Store

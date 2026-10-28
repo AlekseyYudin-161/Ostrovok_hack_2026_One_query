@@ -1,0 +1,17 @@
+{
+ "dataset_name": "sochi_synth",
+ "version": "2.0",
+ "currency": "RUB",
+ "timezone": "Europe/Moscow",
+ "synthetic": true,
+ "seed": 42,
+ "valid_from": "2026-11-01",
+ "valid_to": "2027-10-31",
+ "generated_at": "2026-10-26",
+ "local_lines": [
+  "lastochka_coast",
+  "lastochka_mountain",
+  "bus_105",
+  "bus_coast"
+ ]
+}
