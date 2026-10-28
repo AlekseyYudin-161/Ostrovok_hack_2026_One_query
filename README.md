@@ -182,6 +182,25 @@ Streamlit (ui/) ──HTTP/SSE──► FastAPI /chat (app/) ──► GraphAgen
 - У трёх вариантов поездки разные отели; если подходящих отелей мало (например, с животным), вариантов может быть два.
 - Состояние диалога хранится в памяти процесса: после перезапуска API сессии начинаются заново.
 
+## Структура репозитория
+
+```
+app/                  # FastAPI: /chat (поток событий агента, SSE), /health
+harness/              # агент LangGraph: граф (agent_graph.py), контракт (contracts.py), сборка поездки (trip.py),
+                      #   проверка стыковок (checks.py), даты, районы, защита от инъекций (security.py), LLM-клиент
+synth/                # демо-каталог: данные (data/), цены и офферы (pricing.py), инструменты агента (tools.py), скоринг отелей
+evals/                # eval: тестовые кейсы (golden/), прогон (runner.py), симулятор пользователя, метрики, отчёт (reports/)
+ui/                   # интерфейс Streamlit: экраны, компоненты, тема, страница метрик (pages/)
+tests/                # pytest
+scripts/              # служебные: проверка .env, проба провайдера модели, eval разбора запроса
+make/, Makefile       # make setup / test / lint / api / ui-api / eval / eval-offline
+fixtures/             # тестовые данные отелей для режима без каталога
+docs/ui/              # описание интерфейса и скриншоты экранов
+Dockerfile, docker-compose.yml   # api :8000 + интерфейс :8080
+.env.example          # переменные окружения (копировать в .env)
+secrets.env.age       # ключ модели для жюри (зашифрован age)
+```
+
 ## Команда и модули
 
 | Модуль | Папка | Владелец (GitHub) |
@@ -199,3 +218,24 @@ Streamlit (ui/) ──HTTP/SSE──► FastAPI /chat (app/) ──► GraphAgen
 - Перед PR: `make test && make lint`.
 - `main` — версия для сдачи: тимлид вливает `dev → main`, на последнем коммите — тег `submission`.
 - Ключи и `.env` не коммитим.
+
+
+## Технологии проекта
+
+![Python](https://img.shields.io/badge/Python_3.12-FFFFFF?style=for-the-badge&logo=python&logoColor=306998&color=000000)
+![LangGraph](https://img.shields.io/badge/LangGraph_1.2.17-FFFFFF?style=for-the-badge&logo=langchain&logoColor=306998&color=000000)
+![LangChain Core](https://img.shields.io/badge/langchain--core_1.7.0-FFFFFF?style=for-the-badge&logo=langchain&logoColor=306998&color=000000)
+![Langfuse](https://img.shields.io/badge/Langfuse_5.0.4-FFFFFF?style=for-the-badge&color=000000)
+![OpenAI SDK](https://img.shields.io/badge/openai_SDK_3.36.1-FFFFFF?style=for-the-badge&logo=openai&logoColor=306998&color=000000)
+
+![FastAPI](https://img.shields.io/badge/FastAPI_0.159.1-FFFFFF?style=for-the-badge&logo=fastapi&logoColor=009688&color=000000)
+![Uvicorn](https://img.shields.io/badge/Uvicorn_0.54.0-FFFFFF?style=for-the-badge&color=000000)
+![Streamlit](https://img.shields.io/badge/Streamlit_1.66.1-FFFFFF?style=for-the-badge&logo=streamlit&logoColor=FF4B4B&color=000000)
+![Pydantic](https://img.shields.io/badge/Pydantic_2.14.1-FFFFFF?style=for-the-badge&logo=pydantic&logoColor=E92063&color=000000)
+![HTTPX](https://img.shields.io/badge/httpx_0.28.1-FFFFFF?style=for-the-badge&color=000000)
+
+![Docker](https://img.shields.io/badge/Docker_Compose-FFFFFF?style=for-the-badge&logo=docker&logoColor=2496ED&color=000000)
+![Pytest](https://img.shields.io/badge/Pytest_9.1.1-FFFFFF?style=for-the-badge&logo=pytest&logoColor=306998&color=000000)
+![Ruff](https://img.shields.io/badge/Ruff_0.17.1-FFFFFF?style=for-the-badge&logo=ruff&logoColor=D7FF64&color=000000)
+
+Модель: Qwen3.6-35B-A3B через kodikrouter (OpenAI-совместимый API).
