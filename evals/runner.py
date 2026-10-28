@@ -10,6 +10,7 @@ LLM_PROVIDER=openai_compat → настоящая модель (D5).
 Сценарий одного кейса:
   1. запрос пользователя;
   2. пока агент уточняет (clarify) — отвечает симулятор (simulated_answers), не больше MAX_TURNS ходов;
+     на «нет вариантов» с предложениями (plan.relax) — только если в кейсе задан ответ `relax`;
   3. реплики пересборки (followups), если есть;
   4. если агент спрашивает «оформить?» — симулятор отвечает «да» (сценарий доводится до демо-оплаты).
 Отчёт: evals/reports/eval_report.json (его же читает страница метрик) и eval_report.md (для README и питча).
@@ -27,6 +28,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from itertools import pairwise
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # запуск файлом: импорты harness.*, evals.*
@@ -124,6 +126,22 @@ def trace_url(trace_id: str | None) -> str | None:
         return None
 
 
+# patch из plan.relax → какие условия кейса пользователь согласился снять
+PATCH_WAIVES = {"budget_total": ("budget_total",), "destination_id": ("destination",), "destination": ("destination",),
+                "checkin": ("checkin", "checkout", "month"), "checkout": ("checkout", "nights"), "nights": ("nights",)}
+
+
+def relaxed_keys(turns: list[Turn]) -> set[str]:
+    """Пользователь ответил на «нет вариантов + что поменять» — условия из применённого patch больше не его."""
+    keys: set[str] = set()
+    for prev, nxt in pairwise(turns):
+        relax = (prev.answer.get("plan") or {}).get("relax") if prev.mode == "no_solution" else None
+        if relax and nxt.kind == "sim":
+            for k in (relax[0].get("patch") or {}):
+                keys.update(PATCH_WAIVES.get(k, (k,)))
+    return keys
+
+
 def usage_total(turns: list[Turn], key: str) -> float:
     """Сумма payload.usage[key] по всем ходам кейса (нет usage — 0)."""
     return sum(float((t.usage or {}).get(key) or 0) for t in turns)
@@ -133,8 +151,9 @@ async def run_case(agent: Agent, case: EvalCase) -> tuple[str, list[Turn]]:
     session = f"eval-{case.case_id}-{uuid.uuid4().hex[:6]}"
     sim = UserSimulator(case)
     turns = [await _send(agent, case.query, session, "query")]
-    while turns[-1].mode == "clarify" and len(turns) < MAX_TURNS:
-        reply = sim.reply(turns[-1].answer)
+    while turns[-1].mode in ("clarify", "no_solution") and len(turns) < MAX_TURNS:
+        last = turns[-1].answer
+        reply = sim.reply(last) if turns[-1].mode == "clarify" else sim.relax(last)
         if reply is None:
             break
         turns.append(await _send(agent, reply, session, "sim"))
@@ -157,7 +176,9 @@ def score(case: EvalCase, turns: list[Turn], file: str, session: str = "") -> di
     mode_correct = first.mode in metrics.SAME_MODE.get(expected, {expected})
     if not mode_correct:
         reasons.append(f"режим: ждали {expected}, получили {first.mode}")
-    hard_passed, hard_total, failed = metrics.hard_pass(case.hard_constraints, base.request, base.answer)
+    waived = relaxed_keys(turns[: rec_i + 1] if rec_i is not None else turns)
+    hard = [c for c in case.hard_constraints if c.key not in waived]   # снятое по согласию пользователя не проверяем
+    hard_passed, hard_total, failed = metrics.hard_pass(hard, base.request, base.answer)
     reasons += [f"условие: {f}" for f in failed]
     cs_passed, cs_total = metrics.commonsense(case.commonsense_rules, base.request)
 

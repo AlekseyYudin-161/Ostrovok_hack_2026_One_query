@@ -200,3 +200,49 @@ def test_cost_and_trace_from_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     assert row["turns"][0]["trace_id"] == "t1"
     summary = metrics.summarize([row, {**row, "cost": 0.58}])
     assert summary["cost_rub"] == pytest.approx(1.0) and summary["cost_per_case_rub"] == pytest.approx(0.5)
+
+
+@pytest.mark.asyncio
+async def test_simulator_answers_relax_only_when_case_asks() -> None:
+    """«Нет вариантов» + plan.relax: chat-01 отвечает «да» и доходит до брони; без ключа relax — честный итог."""
+    from evals.runner import run_case
+
+    relax = {"relax": [{"title": "Поднять бюджет", "result": "от 277 783 ₽", "text": "", "patch": {}}]}
+
+    class Agent:
+        def __init__(self) -> None:
+            self.got: list[str] = []
+
+        async def stream(self, text: str, session: str, patch: dict | None = None):
+            from datetime import UTC, datetime
+
+            from harness.contracts import AgentEvent
+            self.got.append(text)
+            mode = {1: "no_solution", 2: "confirm_action"}.get(len(self.got), "purchased")
+            answer = {"mode": mode, "text": "", "plan": relax if mode == "no_solution" else None}
+            yield AgentEvent(run_id="r", ts=datetime.now(UTC), type="answer", payload={"answer": answer, "request": {}})
+
+    asks = _case(simulated_answers={"relax": "да"})
+    _, turns = await run_case(Agent(), asks)
+    assert [t.mode for t in turns] == ["no_solution", "confirm_action", "purchased"]
+    honest = Agent()
+    _, turns = await run_case(honest, _case(expected_mode="no_solution"))
+    assert [t.mode for t in turns] == ["no_solution"] and honest.got == ["Адлер"]
+    seed = {c.case_id: c for _, c in load_cases([str(GOLDEN / "seed_from_chat.jsonl")])}
+    assert seed["chat-01-turkey"].simulated_answers.get("relax") == "да"
+    assert "relax" not in seed["chat-02-sochi"].simulated_answers     # там «нет вариантов» и ждём
+
+
+def test_waived_constraint_after_relax_yes() -> None:
+    """Согласилась поднять бюджет → «бюджет ≤ 80 000» больше не проверяем; остальные условия — как раньше."""
+    from evals.runner import relaxed_keys
+
+    relax = {"relax": [{"title": "Поднять бюджет", "result": "", "text": "", "patch": {"budget_total": 196551}}]}
+    turns = [Turn("query", "Турция", 5, {"mode": "no_solution", "text": "", "plan": relax}, {}),
+             Turn("sim", "да", 5, {"mode": "confirm_action", "text": "", "itineraries": [_itinerary(150000)]},
+                  {"destination": "Адлер"})]
+    assert relaxed_keys(turns) == {"budget_total"}
+    case = _case(hard_constraints=[Constraint(key="budget_total", op="<=", value=80000, source="user"),
+                                   Constraint(key="destination", op="==", value="Адлер", source="user")])
+    row = score(case, turns, "dev")
+    assert (row["hard_passed"], row["hard_total"]) == (1, 1)
