@@ -120,3 +120,81 @@ def test_l9_no_night_legs_and_priced_fixes(planner: TripPlanner, kw: dict) -> No
         assert all("₽" in f or "не предоставляется" in f for f in fixes if f.startswith(("ранний", "поздний")))
         if kw.get("pets"):
             assert all(t.kind != "public" for t in it.transfers)       # с животным — такси
+
+
+@pytest.mark.asyncio
+async def test_choose_variant_two(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    first = await agent.run("Адлер с 6 ноября на 5 ночей, вдвоём", "s-choice")
+    its = first.answer.itineraries
+    assert len(its) >= 2 and "«да, вариант 2»" in first.answer.text
+    bought = await agent.run("да, вариант 2", "s-choice")
+    assert bought.answer.mode.value == "purchased"
+    assert bought.answer.itineraries[0].label == its[1].label
+    assert bought.answer.itineraries[0].total_price == its[1].total_price
+
+
+@pytest.mark.asyncio
+async def test_relax_after_no_solution(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    run = await agent.run("Адлер с 6 ноября на 5 ночей, вдвоём, до 3 тыс", "s-relax")
+    assert run.answer.mode.value == "no_solution"
+    relax = run.answer.plan["relax"]
+    assert relax[0]["title"] == "Поднять бюджет" and relax[0]["patch"]["budget_total"] > 3000
+    assert "Что можно поменять" in run.answer.text and "₽" in relax[0]["result"]
+    fixed = await agent.run("да", "s-relax")                              # «да» применяет первое предложение
+    assert fixed.answer.mode.value == "confirm_action"
+    assert fixed.request.budget_total == relax[0]["patch"]["budget_total"]
+    assert all(it.hotel.price_total <= fixed.request.budget_total for it in fixed.answer.itineraries)
+
+
+@pytest.mark.asyncio
+async def test_stars_and_first_line(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    run = await agent.run("Адлер с 6 ноября на 5 ночей, вдвоём, отель 4 звезды на первой линии", "s-stars")
+    keys = {c.key: c.value for c in run.request.hard_constraints}
+    assert keys == {"min_stars": 4, "beach_line": 1}
+    if run.answer.mode.value == "confirm_action":
+        for it in run.answer.itineraries:
+            h = planner.cat.hotels[it.hotel.hotel.hotel_id]
+            assert (h.stars or 0) >= 4 and h.beach_line == 1
+        assert "4★" in run.answer.text
+    else:                                                              # таких нет — предложит снять условие
+        assert any(r["patch"] == {"hard_constraints": []} for r in run.answer.plan["relax"])
+
+
+def test_tradeoffs_explain(planner: TripPlanner) -> None:
+    plan = planner.plan(_req(raw_text="", destination="Центр Сочи", checkin=date(2026, 11, 6), nights=5,
+                             guests_adults=2), TODAY)
+    cheapest = min(it.total_price for it in plan.itineraries)
+    for it in plan.itineraries:
+        notes = [t.note for t in it.tradeoffs]
+        assert (it.total_price > cheapest) == any(n.startswith("дороже") for n in notes)
+
+
+@pytest.mark.asyncio
+async def test_choice_gives_single_answer(planner: TripPlanner) -> None:
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    await agent.run("Адлер с 6 ноября на 5 ночей, вдвоём", "s-one")
+    answers = [e async for e in agent.stream("да, вариант 2", "s-one") if e.type == "answer"]
+    assert len(answers) == 1 and answers[0].payload["answer"]["mode"] == "purchased"
+
+
+@pytest.mark.asyncio
+async def test_inspire_ranks_areas(planner: TripPlanner) -> None:
+    """L8 inspire: район не назван — RankAreas ML выбирает лучший на месяц, альтернативы — в answer.destinations."""
+    agent = GraphAgent(FakeLLM(), today=TODAY, planner=planner)
+    run = await agent.run("Хочу на море с ребёнком 6 лет в июле на неделю", "s-inspire")
+    assert run.answer.mode.value == "confirm_action" and run.request.destination
+    names = [d.name for d in run.answer.destinations]
+    assert names and names[0] == run.request.destination and "Район не назвали — подобрал район" in run.answer.text
+    assert all("море" in " ".join(d.why) for d in run.answer.destinations)
+    switched = await agent.run(f"а если {names[-1]}?", "s-inspire") if len(names) > 1 else run
+    assert switched.request.destination == names[-1] and switched.request.month == 7
+
+
+@pytest.mark.asyncio
+async def test_inspire_skips_poor_alternatives(planner: TripPlanner) -> None:
+    run = await GraphAgent(FakeLLM(), today=TODAY, planner=planner).run(
+        "хочу в горы на лыжи в январе на 5 ночей, вдвоём", "s-ski")
+    assert all("горы/лыжи" in d.best_for for d in run.answer.destinations)

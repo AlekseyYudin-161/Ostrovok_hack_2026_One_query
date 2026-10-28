@@ -42,6 +42,7 @@ class TripRequest(BaseModel):
     checkout: date | None = None
     guests_adults: int | None = None
     children_ages: list[int] = []
+    children_count: int | None = None        # число детей, если названо без возрастов («с двумя детьми»)
     budget_total: float | None = None
     currency: str = "RUB"                    # TBD
     preferences: list[str] = []              # «у моря», «с завтраком», …
@@ -182,6 +183,7 @@ class Itinerary(BaseModel):
     total_price: float = 0.0
     checks: list[ConnectionCheck] = []
     tradeoffs: list[Tradeoff] = []
+    why: list[str] = []                      # почему выбран отель: плюсы и минусы по скорингу ML («первая линия»)
     label: Literal["balanced", "cheapest", "most_comfortable", "custom"] = "balanced"
 
 
