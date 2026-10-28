@@ -55,7 +55,7 @@ from harness.dates import WEEKDAYS_RU, has_date_hint, month_from_text, parse_dat
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
 from harness.llm import build_llm, start_usage, structured
 from harness.security import FILLER, NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
-from harness.trip import TripPlanner, build_planner, describe
+from harness.trip import DEFAULT_ADULTS, TripPlanner, build_planner, describe
 
 log = logging.getLogger(__name__)
 
@@ -671,6 +671,11 @@ class GraphAgent:
     def _plan_trip(self, req: TripRequest) -> State:
         """L8: поездка целиком на каталоге ML. Додуманные даты/гости/город — в допущения, даты — в запрос."""
         plan = self.planner.plan(req, self.today)
+        why = self.planner.why(plan.itineraries, req, self.today)      # «Почему» — полем варианта, для карточек UI
+        for it in plan.itineraries:
+            it.why = why.get(it.label, [])
+        if plan.itineraries and not req.guests_adults:  # допущение «2 взрослых» — в запрос, как и даты (панель UI)
+            req.guests_adults = DEFAULT_ADULTS
         if plan.checkin and (not req.checkin or not req.checkout):
             req.checkin, req.checkout = plan.checkin, plan.checkout
             req.nights = (plan.checkout - plan.checkin).days
@@ -750,10 +755,8 @@ class GraphAgent:
         if state.get("changes"):
             lines.append("Изменил: " + "; ".join(state["changes"]) + ".")
         lines += [a.reason for a in req.assumptions]
-        why = self.planner.why(its, req, self.today) if self.planner else {}
         for i, it in enumerate(its, 1):
-            lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None,
-                              why.get(it.label))
+            lines += describe(it, i, self.planner.stars(it.hotel.hotel.hotel_id) if self.planner else None, it.why)
         k = 1
         if state.get("booking") or state.get("changes"):   # «я же сказал Вертикаль» — предлагаем названный вариант
             pick = pick_variant(state.get("text") or "", state["itineraries"])
@@ -815,6 +818,15 @@ class GraphAgent:
         pending = state["answer"]["pending_action"]
         addon = pending.get("tool") == "addon_mock"
         log.info("confirm: ответ %r → %s", reply, decision)
+        its = state.get("itineraries") or []
+        if decision is False and not addon and its and (choice := pick_variant(reply, its).choice) \
+                and 1 <= choice <= len(its):                 # «нет, вариант 3» — не отказ, а другой выбор: переспросим
+            it = its[choice - 1]
+            pending = {**pending, "label": it["label"], "hotel_id": it["hotel"]["hotel"]["hotel_id"],
+                       "price_total": it["total_price"]}
+            text = (f"Оформить вариант {choice} «{it['hotel']['hotel']['name']}» и дорогу за "
+                    f"{rub(it['total_price'])}? Ответьте «да» или «нет» (демо-оплата).")
+            return {"answer": {**state["answer"], "text": text, "pending_action": pending}, "reask": True}
         if decision is False:
             if addon:
                 answer = AgentAnswer(mode=AgentMode.PLAN, text=f"Хорошо, не добавляю. Бронь {state['booking']['ref']} "
@@ -825,7 +837,6 @@ class GraphAgent:
             return {"answer": answer.model_dump(mode="json"), "reask": False}
         if addon:
             return {"reask": False}
-        its = state.get("itineraries") or []
         pick = pick_variant(reply, its) if its else Pick()
         if pick.choice and 1 <= pick.choice <= len(its):
             it = its[pick.choice - 1]
