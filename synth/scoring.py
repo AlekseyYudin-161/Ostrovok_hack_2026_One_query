@@ -91,8 +91,12 @@ class Scored:
         return self.pros[:n] + self.cons[:1]
 
     def why_extra(self, n: int = 3) -> list[str]:
-        """Для ответа рядом с tradeoffs: плюсы + минусы отеля, которых tradeoffs не показывают (шум, далеко…)."""
-        return self.pros[:n] + [t for c, t in self.cons_by if c in EXTRA_CON_CRITERIA][:2]
+        """Для «Почему этот вариант»: только плюсы отеля, минусы — в cons_extra()."""
+        return self.pros[:n]
+
+    def cons_extra(self, n: int = 2) -> list[str]:
+        """Для «Чем пожертвовали»: минусы отеля, которых tradeoffs не показывают (шум, далеко, мало отзывов…)."""
+        return [t for c, t in self.cons_by if c in EXTRA_CON_CRITERIA][:n]
 
 
 def resolve_weights(priorities: dict[str, float] | None, base: dict[str, float] = DEFAULT_WEIGHTS) -> dict[str, float]:
