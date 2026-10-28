@@ -225,8 +225,17 @@ class TripPlanner:
         ctx = ScoreContext(today=today, checkin=req.checkin, children_ages=kids, pets=req.pets,
                            wishes=list(req.preferences), meal_required=constraint(req, "meal"))
         scored = {s.offer.offer_id: s for s in score_hotels(self.cat, [it.hotel for it in its if it.hotel], ctx)}
-        return {it.label: scored[it.hotel.offer_id].why_extra() for it in its
-                if it.hotel and it.hotel.offer_id in scored}
+        out: dict[str, list[str]] = {}
+        for it in its:
+            s = scored.get(it.hotel.offer_id) if it.hotel else None
+            if s is None:
+                continue
+            out[it.label] = s.why_extra()
+            cons = s.cons_extra() if hasattr(s, "cons_extra") else []   # минусы отеля от скоринга ML — в «Минусы»
+            known = {t.note for t in it.tradeoffs}
+            it.tradeoffs += [Tradeoff(criterion="hotel", this_value=None, best_value=None, note=c)
+                             for c in cons if c not in known]
+        return out
 
     def rank_areas(self, req: TripRequest, today: date, limit: int = 3) -> list[DestinationOption]:
         """L8 inspire: районы на месяц поездки по пожеланиям — инструмент ML RankAreas (погода, дорога, оценка цены)."""
