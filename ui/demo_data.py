@@ -33,7 +33,7 @@ DESTINATIONS = [
 ]
 
 
-def _itinerary(name, city, rating, hotel_price, label, tradeoffs, over=0):
+def _itinerary(name, city, rating, hotel_price, label, tradeoffs, over=0, why=None):
     total = hotel_price + 14200 + 3200
     return {
         "destination_id": {"Дагомыс": "dagomys", "Адлер": "adler", "Сочи-центр": "center"}.get(city, city.lower()), "checkin": "2026-09-12", "checkout": "2026-09-19", "label": label, "total_price": total,
@@ -46,12 +46,14 @@ def _itinerary(name, city, rating, hotel_price, label, tradeoffs, over=0):
                    {"rule": "checkout_vs_departure", "ok": True, "severity": "warning", "message": "После выезда в 12:00 до отъезда в аэропорт ≈ 3 ч.",
                     "fixes": ["запросить поздний выезд — 1 400 ₽", "оставить багаж в отеле"]},
                    {"rule": "dates_match", "ok": True, "severity": "info", "message": "Даты брони и рейсов совпадают"}],
+        "why": why or [],
         "tradeoffs": [{"criterion": "x", "this_value": 0, "best_value": 0, "note": t} for t in tradeoffs],
     }
 
 
 ITINERARIES = [
-    _itinerary("Морской бриз", "Дагомыс", 8.7, 31500, "balanced", ["Дальше от центра: 25 минут на такси"]),
+    _itinerary("Морской бриз", "Дагомыс", 8.7, 31500, "balanced", ["Дальше от центра: 25 минут на такси"],
+                why=["первая линия", "бесплатная отмена до 29.10"]),
     _itinerary("Приморский", "Адлер", 8.2, 22200, "cheapest", ["Отель 3★ вместо 4★", "Вторая линия"]),
     _itinerary("Белый парус", "Сочи-центр", 9.1, 43900, "most_comfortable", ["Дороже других вариантов"]),
 ]

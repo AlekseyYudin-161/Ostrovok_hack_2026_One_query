@@ -7,7 +7,7 @@ import html
 import re
 from typing import Any
 
-from ui.theme import photo_uri
+from ui.theme import GREEN, photo_uri
 
 TICK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"/></svg>'
 def hero_icon(path: str, color: str) -> str:
@@ -117,6 +117,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
             "label": it.get("label", "custom"),
             "meal": MEALS.get(offer.get("meal", "none"), ""),
             "cancel": "бесплатная отмена" if offer.get("refundable", True) else "без возврата",
+            "why": [w for w in it.get("why") or [] if w],  # «Почему» — список строк от агента, над «Чем пожертвовали»
             "tradeoffs": [t.get("note", "") for t in it.get("tradeoffs", [])],
             "checks": it.get("checks", []), "raw": it,
         })
@@ -128,7 +129,7 @@ def options_from_answer(answer: dict, budget: float | None = None) -> list[dict]
                 "label": "balanced" if i == 0 else "custom",
                 "meal": MEALS.get(c.get("meal") or "", c.get("meal") or ""),
                 "cancel": CANCEL.get(c.get("cancellation") or "", c.get("cancellation") or ""),
-                "tradeoffs": [], "checks": [], "raw": c,
+                "why": [], "tradeoffs": [], "checks": [], "raw": c,
             })
     for o in opts:
         # бюджет у агента только на проживание, поэтому сравниваем с ценой отеля, а не с итогом поездки
@@ -146,6 +147,11 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
     stay = ""
     if o.get("stay_price") and o["stay_price"] != o.get("price"):
         stay = f'<div class="od-small">из них отель {rub(o["stay_price"])}</div>'
+    why = ""
+    if o.get("why"):
+        li = "".join(f'<div class="od-li" style="font-size:14px;margin:0 0 4px"><span class="od-dot" style="background:{GREEN};margin-top:6px"></span>'
+                     f"<span>{esc(w)}</span></div>" for w in o["why"])
+        why = f'<div style="margin-top:12px"><b style="font-size:13px">Почему этот вариант</b><div style="margin-top:6px">{li}</div></div>'
     trade = ""
     if o.get("tradeoffs"):
         li = "".join(f"<li>{esc(t)}</li>" for t in o["tradeoffs"])
@@ -154,7 +160,7 @@ def hotel_card(o: dict, rec: bool = False, budget: float | None = None) -> str:
 {cover(o["photo"], o["name"], badge, green=rec, height=190)}
 <div style="padding:16px 12px 8px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
 <div><div class="od-h3">{esc(o["name"])}</div><div class="od-small" style="margin-top:4px">{esc(sub)}</div></div>
-<div style="text-align:right"><div class="od-price">{rub(o["price"])}</div>{stay}</div></div>{warn}{trade}</div></div>''')
+<div style="text-align:right"><div class="od-price">{rub(o["price"])}</div>{stay}</div></div>{warn}{why}{trade}</div></div>''')
 
 
 def area_card(d: dict, rec: bool = False) -> str:

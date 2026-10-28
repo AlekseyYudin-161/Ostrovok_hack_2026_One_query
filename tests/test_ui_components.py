@@ -124,3 +124,15 @@ def test_cart_summary_compares_budget_with_stay():
 
     assert f"Проживание в рамках бюджета, остаётся {c.rub(20000)}" in c.cart_summary([("Отель", 80000)], 120000, 100000, 80000)
     assert f"Проживание выше бюджета на {c.rub(10000)}" in c.cart_summary([("Отель", 80000)], 120000, 70000, 80000)
+
+
+def test_why_is_shown_above_tradeoffs():
+    from ui import components as c
+
+    ans = {"itineraries": [{"total_price": 1000, "why": ["первая линия", "бесплатная отмена до 29.10"],
+                            "tradeoffs": [{"note": "Дальше от центра"}], "hotel": {"hotel": {"name": "Отель"}, "price_total": 900}}]}
+    html = c.hotel_card(c.options_from_answer(ans)[0])
+    assert "Почему этот вариант" in html and "первая линия" in html
+    assert html.index("Почему этот вариант") < html.index("Чем пожертвовали")
+    plain = c.hotel_card(c.options_from_answer({"itineraries": [{"total_price": 1, "hotel": {"hotel": {"name": "О"}}}]})[0])
+    assert "Почему" not in plain
