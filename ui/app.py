@@ -50,8 +50,14 @@ def app_page() -> None:
     screens.scroll_top()
 
     hint = "Например: можно ранний заезд?" if ss.screen == "paid" else "Куда хотите поехать?"
-    if ss.screen in screens.CHAT_SCREENS and (prompt := st.chat_input(hint)):
-        screens.submit(prompt)
+    if ss.screen in screens.CHAT_SCREENS:
+        # Поле внизу НЕ на верхнем уровне страницы: такое поле Streamlit считает «чатом» и сам прокручивает страницу
+        # к последнему элементу, поэтому после ответа экран уезжал вниз. Внутри контейнера поле обычное,
+        # а прижимаем его к низу экрана CSS (.st-key-dock в theme.py).
+        with st.container(key="dock"):
+            prompt = st.chat_input(hint)
+        if prompt:
+            screens.submit(prompt)
 
 
 st.set_page_config(page_title="О!дин запрос", page_icon="🧳", layout="centered")

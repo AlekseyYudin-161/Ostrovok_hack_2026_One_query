@@ -176,6 +176,9 @@ label[data-baseweb="checkbox"] span, label[data-baseweb="radio"] span {{ transit
 /* нижняя панель по ширине совпадает с контентной областью (.block-container) */
 [data-testid="stBottomBlockContainer"] {{ max-width:1040px !important; width:100%; padding:8px 24px 24px !important; margin:0 auto; }}
 [data-testid="stMain"], section.main {{ overflow-anchor:none; }}  /* браузер не «дотягивает» прокрутку к нижним карточкам */
+/* поле ввода внизу: контейнер прижат к низу окна (см. ui/app.py) */
+.st-key-dock {{ position:fixed; left:0; right:0; bottom:0; z-index:99; width:auto;
+  padding:8px max(24px, calc((100vw - 1040px) / 2)) 24px; background:linear-gradient(180deg, rgba(245,245,247,0) 0%, #F5F5F7 45%); }}
 .st-key-metrics-link {{ margin-top:4px; }}
 .st-key-metrics-link [data-testid="stPageLink"] {{ justify-content:center; }}
 .st-key-metrics-link [data-testid="stPageLink"] a {{ background:transparent; padding:4px 8px; }}
