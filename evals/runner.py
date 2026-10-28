@@ -51,6 +51,8 @@ class Turn:
     answer: dict = field(default_factory=dict)
     request: dict = field(default_factory=dict)
     events: list[str] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)      # payload.usage ответа: tokens_in, tokens_out, llm_calls, cost_rub
+    trace_id: str | None = None                    # payload.trace_id (если включён Langfuse)
 
     @property
     def mode(self) -> str:
@@ -100,11 +102,31 @@ async def _send(agent: Agent, text: str, session: str, kind: str) -> Turn:
             if ev.type == "answer":
                 turn.answer = ev.payload.get("answer") or {}
                 turn.request = ev.payload.get("request") or turn.request
+                turn.usage = ev.payload.get("usage") or turn.usage
+                turn.trace_id = ev.payload.get("trace_id") or turn.trace_id
     except Exception as e:  # падение агента — тоже результат: кейс не доведён
         log.exception("агент упал на %r", text)
         turn.answer = {"mode": "error", "text": f"{type(e).__name__}: {e}"}
     turn.ms = int((time.perf_counter() - started) * 1000)
     return turn
+
+
+def trace_url(trace_id: str | None) -> str | None:
+    """Ссылка на трейс в Langfuse — разбор провала кликом. Без ключей или без трейса — None."""
+    if not trace_id or not os.getenv("LANGFUSE_PUBLIC_KEY"):
+        return None
+    try:
+        from langfuse import get_client  # импорт здесь: без ключей Langfuse не нужен
+
+        return get_client().get_trace_url(trace_id=trace_id)
+    except Exception:  # ссылка — удобство, eval из-за неё не падает
+        log.warning("Langfuse: не удалось получить ссылку на трейс %s", trace_id, exc_info=True)
+        return None
+
+
+def usage_total(turns: list[Turn], key: str) -> float:
+    """Сумма payload.usage[key] по всем ходам кейса (нет usage — 0)."""
+    return sum(float((t.usage or {}).get(key) or 0) for t in turns)
 
 
 async def run_case(agent: Agent, case: EvalCase) -> tuple[str, list[Turn]]:
@@ -184,12 +206,15 @@ def score(case: EvalCase, turns: list[Turn], file: str, session: str = "") -> di
         case_id=case.case_id, run_id=session, delivered=rec is not None, mode_correct=mode_correct,
         hard_passed=hard_passed, hard_total=hard_total, commonsense_passed=cs_passed, commonsense_total=cs_total,
         grounded_ratio=grounded, injection_success=injection, judge_score=None,
-        latency_ms=sum(t.ms for t in turns), cost=0.0, trace_url=None, completed=completed,
+        latency_ms=sum(t.ms for t in turns), cost=round(usage_total(turns, "cost_rub"), 4),
+        trace_url=trace_url(next((t.trace_id for t in reversed(turns) if t.trace_id), None)), completed=completed,
         clarifications=clarifications, ttfr_ms=ttfr, connection_errors=conn_errors, constraint_retention=retention)
     return {**result.model_dump(), "file": file, "slice": case.slice, "query": case.query,
             "expected_mode": expected, "first_mode": first.mode, "itineraries_checked": len(its),
             "edge_violations": edges, "reasons": reasons,
-            "turns": [{"kind": t.kind, "text": t.text, "mode": t.mode, "ms": t.ms,
+            "tokens_in": int(usage_total(turns, "tokens_in")), "tokens_out": int(usage_total(turns, "tokens_out")),
+            "llm_calls": int(usage_total(turns, "llm_calls")),
+            "turns": [{"kind": t.kind, "text": t.text, "mode": t.mode, "ms": t.ms, "trace_id": t.trace_id,
                        "answer_text": (t.answer.get("text") or "")[:600]} for t in turns]}
 
 
