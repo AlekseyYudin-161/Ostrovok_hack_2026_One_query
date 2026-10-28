@@ -95,3 +95,7 @@ uv run pytest tests/test_ui.py tests/test_ui_components.py -q
 - Бюджет у агента только на проживание: метка «отель дороже бюджета» и итог в корзине сравнивают его с `itinerary.hotel.price_total`, а не с итогом поездки.
 - `checks` с `severity` warning/error (даже при `ok = true`) показываются жёлтым вместе с вариантами решения из `checks[].fixes`; info — зелёным.
 - «Другие районы» не включают текущий: выбранный, из `request.destination` или тот, что агент подобрал сам (`itineraries[0].destination_id`).
+
+## Боковое меню
+
+Если рядом с `ui/app.py` есть страницы (`ui/pages/2_metrics.py`), `ui/app.py` подключает их через `st.navigation` и подписывает по-русски: «Приложение» и «Метрики». Новую страницу добавляют в список `extra` в `ui/app.py`. Если страниц нет, меню не показывается.
