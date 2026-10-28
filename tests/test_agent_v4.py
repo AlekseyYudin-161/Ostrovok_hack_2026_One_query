@@ -255,3 +255,20 @@ def test_unavailable_fix_is_not_a_button(planner: TripPlanner) -> None:
     out = planner._priced_fixes(c, hid)
     assert out.fixes == ["оставить багаж в отеле"]
     assert out.message == "Ждать ≈8 ч. Поздний выезд в этом отеле не предоставляется."
+
+
+# ---------- agent-v9: минусы отеля от скоринга — в «Чем пожертвовали», а не в «Почему» ----------
+def test_hotel_cons_go_to_tradeoffs(planner: TripPlanner, monkeypatch: pytest.MonkeyPatch) -> None:
+    sc = pytest.importorskip("synth.scoring")
+    real = sc.score_hotels
+
+    def with_cons(*a, **k):
+        out = real(*a, **k)
+        for s in out:
+            object.__setattr__(s, "cons_extra", lambda: ["детских удобств нет"])
+        return out
+    monkeypatch.setattr(sc, "score_hotels", with_cons)
+    plan = planner.plan(_req_khosta(), TODAY)
+    why = planner.why(plan.itineraries, _req_khosta(), TODAY)
+    assert plan.itineraries and all("детских удобств нет" not in w for w in why.values())
+    assert all(any(t.note == "детских удобств нет" for t in it.tradeoffs) for it in plan.itineraries)
