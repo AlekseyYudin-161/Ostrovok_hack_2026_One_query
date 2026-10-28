@@ -73,11 +73,11 @@ def constraint(req: TripRequest, key: str):
 
 
 def origin_from_text(text: str) -> str | None:
+    """Город отправления по «из Казани»; если поправили («из Москвы» → «нет, из Казани») — берём последний."""
     low = text.lower()
-    for stem, city in ORIGIN_STEMS.items():
-        if re.search(r"\bиз\s+" + stem, low):
-            return city
-    return None
+    found = [(m.start(), city) for stem, city in ORIGIN_STEMS.items()
+             for m in re.finditer(r"\bиз\s+" + stem, low)]
+    return max(found)[1] if found else None
 
 
 def assumed_checkin(today: date, month: int | None) -> date:
@@ -168,10 +168,10 @@ class TripPlanner:
         if not outs or not backs:
             out.notes.append("Дорогу на эти даты в демо-расписании не нашёл — показываю только проживание.")
 
-        picks = self._pick_hotels(req, out.hotels, today, kids, meal)
+        chosen = self._distinct_hotels(req, out.hotels, today, kids, meal)
         seen: set[tuple] = set()
         for label in ("balanced", "cheapest", "most_comfortable"):
-            it = self._variant(label, picks.get(label, out.hotels), outs, backs, checkin, checkout, adults, kids,
+            it = self._variant(label, [chosen[label]], outs, backs, checkin, checkout, adults, kids,
                                req.pets, aid)
             key = (it.hotel.offer_id if it.hotel else None, it.outbound.option_id if it.outbound else None,
                    it.inbound.option_id if it.inbound else None, tuple(t.kind for t in it.transfers))
@@ -191,6 +191,29 @@ class TripPlanner:
         ctx = ScoreContext(today=today, checkin=req.checkin, children_ages=kids, pets=req.pets,
                            wishes=list(req.preferences), meal_required=meal)
         return {label: [s.offer] for label, s in pick_variants(self.cat, hotels, ctx).items()}
+
+    def _distinct_hotels(self, req: TripRequest, hotels: list[HotelOffer], today: date, kids: list[int],
+                         meal: str | None) -> dict[str, HotelOffer]:
+        """Отель каждого варианта — разный, если отелей хватает: иначе «Оптимально» и «Дешевле всего» отличаются
+        только дорогой. «Дешевле всего» выбирает первым (его смысл — цена); если отель скоринга ML уже занят,
+        вариант берёт отель из оставшихся по правилу: «Оптимально» — дешевле среди рейтинга не ниже медианы,
+        «Комфортно» — лучший рейтинг."""
+        picks = self._pick_hotels(req, hotels, today, kids, meal)
+        chosen: dict[str, HotelOffer] = {}
+        used: set[str] = set()
+        for label in ("cheapest", "balanced", "most_comfortable"):
+            pool = [h for h in hotels if h.hotel.hotel_id not in used] or hotels
+            ids = {h.hotel.hotel_id for h in pool}
+            first = picks.get(label, [None])[0]
+            if first is not None and first.hotel.hotel_id in ids:
+                hotel = first
+            else:                     # отель скоринга уже занят — правило с учётом цены, а не повторный скоринг:
+                hotel = self._pick_hotel(label, pool)   # скоринг на урезанном списке уводил «Оптимально» в 5★ дороже всех
+                if first is not None:
+                    log.info("variants: %s — отель %s занят, взял %s", label, first.hotel.name, hotel.hotel.name)
+            chosen[label] = hotel
+            used.add(hotel.hotel.hotel_id)
+        return chosen
 
     def why(self, its: list[Itinerary], req: TripRequest, today: date) -> dict[str, list[str]]:
         """M5 explain: почему выбран отель варианта — плюсы и минусы отеля, которых нет в tradeoffs."""
@@ -327,13 +350,17 @@ class TripPlanner:
             return c
         fees = {"запросить ранний заезд": ("ранний заезд", h.early_checkin_fee),
                 "запросить поздний выезд": ("поздний выезд", h.late_checkout_fee)}
-        fixes = []
+        fixes, notes = [], []
         for f in c.fixes:
             if f in fees:
                 what, fee = fees[f]
-                f = f"{what} — {_rub(fee)}" if fee is not None else f"{what} в этом отеле не предоставляется"
+                if fee is None:                          # не действие, а факт — в текст проверки, не в кнопки
+                    notes.append(f"{what.capitalize()} в этом отеле не предоставляется.")
+                    continue
+                f = f"{what} — {_rub(fee)}"
             fixes.append(f)
-        return c.model_copy(update={"fixes": fixes})
+        message = " ".join([c.message, *notes])
+        return c.model_copy(update={"fixes": fixes, "message": message})
 
     @staticmethod
     def _pick_hotel(label: str, hotels: list[HotelOffer]) -> HotelOffer:

@@ -55,7 +55,14 @@ from harness.dates import WEEKDAYS_RU, has_date_hint, month_from_text, parse_dat
 from harness.fakes import FakeHotelSearch, FakeLLM, FakeRanker, HotelSearchArgs
 from harness.llm import build_llm, start_usage, structured
 from harness.security import FILLER, NOTE, PAUSE_REFUSAL, REFUSAL, guard_input, leaks, safe_place
-from harness.trip import DEFAULT_ADULTS, TripPlanner, build_planner, describe
+from harness.trip import (
+    DEFAULT_ADULTS,
+    DEFAULT_ORIGIN,
+    TripPlanner,
+    build_planner,
+    describe,
+    origin_from_text,
+)
 
 log = logging.getLogger(__name__)
 
@@ -258,6 +265,15 @@ def pick_variant(text: str, its: list[dict]) -> Pick:
     return Pick(ambiguous=sorted(hits), unknown=unknown)
 
 
+def is_change(text: str, its: list[dict], today: date) -> bool:
+    """Короткий ответ, который правит запрос: район, даты, сдвиг, город отправления. Выбор варианта — не правка."""
+    if its and pick_variant(text, its).choice:
+        return False
+    low = text.lower()
+    return bool(find_by_name(AREA_LIST, low) or parse_shift(text) or parse_dates(text, today)[0]
+                or origin_from_text(text))
+
+
 def yes_no(text: str) -> bool | None:
     """Короткий ответ на «Оформить?»: True / False; None — не похоже на ответ (значит, это новый запрос)."""
     words = re.sub(r"[^\w\s]", " ", text.lower()).split()
@@ -280,6 +296,20 @@ def detect_other_place(low: str) -> str | None:
     return None
 
 
+def adults_from_text(low: str) -> int | None:
+    """Число взрослых по явным словам: «вдвоём», «трое взрослых», «нас трое», «втроём», «еду один»."""
+    adults = 2 if re.search(r"\b(вдвоём|вдвоем|с женой|с мужем)\b", low) else None
+    g = (re.search(r"\b(двое|трое|четверо|пятеро|шестеро)\s+взросл", low)
+         or re.search(r"\bнас\s+(двое|трое|четверо|пятеро|шестеро)\b", low))
+    if g:
+        adults = {"двое": 2, "трое": 3, "четверо": 4, "пятеро": 5, "шестеро": 6}[g.group(1)]
+    elif g := re.search(r"\b(втро[её]м|вчетвером|впятером)\b", low):
+        adults = {"втроём": 3, "втроем": 3, "вчетвером": 4, "впятером": 5}[g.group(1)]
+    elif re.search(r"\bеду\s+(?:один|одна)\b|\b(?:один|одна)\s+еду\b", low):
+        adults = 1
+    return adults
+
+
 def rules_parse(text: str, today: date) -> Understood:
     """Офлайн-разбор для LLM_PROVIDER=fake и запасной путь, если LLM не ответила по схеме."""
     low = text.lower()
@@ -293,11 +323,7 @@ def rules_parse(text: str, today: date) -> Understood:
             for x in re.findall(r"\d{1,2}", grp)]                     # «5 и 8 лет», «4, 9 лет»
     kids_n = next((n for w, n in KIDS_COUNT.items()
                    if re.search(rf"\b{w}\s+(?:\w+\s+)?(?:дет|детьми|ребят|ребён|ребен|сын|доч)", low)), None)
-    adults = 2 if re.search(r"\b(вдвоём|вдвоем|с женой|с мужем)\b", low) else None
-    if g := re.search(r"\b(двое|трое|четверо|пятеро|шестеро)\s+взросл", low):
-        adults = {"двое": 2, "трое": 3, "четверо": 4, "пятеро": 5, "шестеро": 6}[g.group(1)]
-    elif re.search(r"\bеду\s+(?:один|одна)\b|\b(?:один|одна)\s+еду\b", low):
-        adults = 1
+    adults = adults_from_text(low)
     return Understood(area=area.name if area else None, other_destination=other,
                       wishes=[w for w, keys in WISH_WORDS.items() if any(k in low for k in keys)],
                       budget_total=budget, checkin=checkin.isoformat() if checkin else None,
@@ -316,11 +342,15 @@ async def understand_text(llm: LLMClient, text: str, today: date) -> Understood:
     if isinstance(llm, FakeLLM):
         return rules_parse(text, today)
     try:
-        return await structured(llm, [{"role": "system", "content": system_prompt(today)},
-                                      {"role": "user", "content": text}], Understood)
+        u = await structured(llm, [{"role": "system", "content": system_prompt(today)},
+                                   {"role": "user", "content": text}], Understood)
     except Exception:
         log.warning("LLM не разобрала запрос — откат на правила", exc_info=True)
         return rules_parse(text, today)
+    if u.adults is None and (adults := adults_from_text(text.lower())):   # «нас трое» модель иногда пропускает
+        log.info("understand: взрослых %d — по правилам", adults)
+        u.adults = adults
+    return u
 
 
 def _iso(value: str | None, today: date) -> date | None:
@@ -381,7 +411,7 @@ def to_trip_request(text: str, u: Understood, today: date) -> TripRequest:
                        checkin=checkin, checkout=checkout, guests_adults=u.adults,
                        month=u.month or (checkin.month if checkin else None), children_ages=u.children_ages,
                        children_count=max(len(u.children_ages), u.children_count or 0) or None,
-                       pets=u.pets, preferences=[*u.wishes, *(["с детьми"] if u.with_kids and "с детьми" not in u.wishes else [])],
+                       pets=u.pets, origin_city=origin_from_text(text) or DEFAULT_ORIGIN, preferences=[*u.wishes, *(["с детьми"] if u.with_kids and "с детьми" not in u.wishes else [])],
                        missing_fields=[] if u.area else ["destination"])
     req.hard_constraints = user_constraints(u)
     req.assumptions = request_assumptions(req, [weekend])
@@ -421,7 +451,8 @@ def describe_changes(old: TripRequest, new: TripRequest) -> list[str]:
              rub(new.budget_total) if new.budget_total else "—"),
             ("Взрослых", str(old.guests_adults or "—"), str(new.guests_adults or "—")),
             ("Дети", _kids_label(old), _kids_label(new)),
-            ("Животные", "да" if old.pets else "нет", "да" if new.pets else "нет")]
+            ("Животные", "да" if old.pets else "нет", "да" if new.pets else "нет"),
+            ("Откуда", old.origin_city or DEFAULT_ORIGIN, new.origin_city or DEFAULT_ORIGIN)]
     return [f"{name}: {a} → {b}" for name, a, b in rows if a != b]
 
 
@@ -482,8 +513,9 @@ def merge_request(old: TripRequest, fresh: TripRequest, u: Understood, text: str
     if shift and old.checkin:
         data["checkin"] = old.checkin + timedelta(days=shift)
         data["checkout"] = old.checkout + timedelta(days=shift) if old.checkout else None
-    elif fresh.checkin:
-        data.update(checkin=fresh.checkin, checkout=fresh.checkout, nights=fresh.nights)
+    elif fresh.checkin:                                  # «с 14 ноября» без выезда — число ночей прежнее
+        nights = fresh.nights if fresh.checkout or fresh.nights else old.nights
+        data.update(checkin=fresh.checkin, checkout=fresh.checkout, nights=nights)
     elif fresh.nights:
         data.update(nights=fresh.nights, checkout=None)
     if u.budget_total:
@@ -499,6 +531,8 @@ def merge_request(old: TripRequest, fresh: TripRequest, u: Understood, text: str
     elif u.children_count:
         data["children_count"] = u.children_count
     data["pets"] = old.pets or u.pets
+    if origin := origin_from_text(text):
+        data["origin_city"] = origin
     data["preferences"] = list(dict.fromkeys([*old.preferences, *fresh.preferences]))
     new_keys = {c.key for c in fresh.hard_constraints}
     data["hard_constraints"] = [c.model_dump() for c in old.hard_constraints if c.key not in new_keys] + [
@@ -959,9 +993,12 @@ class GraphAgent:
     async def _graph_input(self, text: str, cfg: dict, patch: dict | None) -> dict | Command:
         """Ответ «да/нет» на паузу — продолжаем граф; иначе — новый ход (текст или правка из панели)."""
         snapshot = await self.graph.aget_state(cfg)
+        its = snapshot.values.get("itineraries") or []
+        if not patch and is_change(text, its, self.today):   # «давай в Хосте» на паузе — правка, а не «да»
+            log.info("pause: %r — правка запроса, пересобираю", text)
+            return {"text": text, "patch": None}
         if not patch and snapshot.next in (("confirm",), ("suggest_confirm",)) and yes_no(text) is not None:
             return Command(resume=text)
-        its = snapshot.values.get("itineraries") or []
         if not patch and snapshot.next == ("confirm",) and its and len(text.split()) <= MAX_REPLY_WORDS + 2 \
                 and pick_variant(text, its).choice:      # «Вертикаль» на паузе — выбор варианта, переспросим «да?»
             return Command(resume=text)
