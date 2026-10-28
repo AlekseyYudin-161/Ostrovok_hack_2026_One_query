@@ -323,6 +323,21 @@ def trip_header(text: str | None, assumptions: list[dict], changes: list[str] | 
     return _h(f'<div style="margin:4px 8px 12px">{"".join(rows)}</div>') if rows else ""
 
 
+def scroll_top_js(n: int) -> str:
+    """JS «показать верх страницы». n меняется при каждом вызове, чтобы Streamlit выполнил скрипт заново.
+    Прокручивается контейнер страницы Streamlit (в разных версиях у него разные селекторы), повторяется
+    ~1,5 секунды, пока страница дорисовывается (фото, длинный ответ), и прекращается, если пользователь сам начал листать."""
+    js = """(function(d,w){ var stop=false;
+  var up=function(){ if(stop){ return; }
+    var h=d.querySelector('.od-head'); if(h && h.scrollIntoView){ h.scrollIntoView({block:'start'}); }
+    ['[data-testid="stMain"]','section.main','.main','[data-testid="stAppViewContainer"]'].forEach(function(s){
+      var e=d.querySelector(s); if(e){ e.scrollTop=0; } });
+    w.scrollTo(0,0); };
+  ['wheel','touchstart','keydown'].forEach(function(t){ w.addEventListener(t,function(){ stop=true; },{once:true,passive:true}); });
+  up(); var i=0; var t=setInterval(function(){ up(); i++; if(i>15||stop){ clearInterval(t); } },100); })(document,window);"""
+    return f"/* {n} */ " + js
+
+
 def agent_question(questions: list[str]) -> str:
     """Вопрос агента (answer.questions) заметным блоком над вариантами, например «Оформить вариант 3…?»."""
     qs = [q for q in questions or [] if q]

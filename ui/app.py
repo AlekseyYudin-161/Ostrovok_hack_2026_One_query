@@ -47,19 +47,32 @@ def app_page() -> None:
             screens.md(c.timeline(ss.get("events", []), False))
     else:
         screens.SCREENS[ss.screen]()
+    screens.scroll_top()
 
     hint = "Например: можно ранний заезд?" if ss.screen == "paid" else "Куда хотите поехать?"
-    if ss.screen in screens.CHAT_SCREENS and (prompt := st.chat_input(hint)):
-        screens.submit(prompt)
+    if ss.screen in screens.CHAT_SCREENS:
+        # Поле внизу НЕ на верхнем уровне страницы: такое поле Streamlit считает «чатом» и сам прокручивает страницу
+        # к последнему элементу, поэтому после ответа экран уезжал вниз. Внутри контейнера поле обычное,
+        # а прижимаем его к низу экрана CSS (.st-key-dock в theme.py).
+        with st.container(key="dock"):
+            prompt = st.chat_input(hint)
+        if prompt:
+            screens.submit(prompt)
 
 
 st.set_page_config(page_title="О!дин запрос", page_icon="🧳", layout="centered")
 
-# Боковое меню: страницы из ui/pages/ (например, «Метрики») подписываем по-русски.
-# Если дополнительных страниц нет, меню не показывается и приложение запускается как раньше.
+# Страницы из ui/pages/ (например, «Метрики») подключаем через st.navigation, но боковое меню прячем:
+# пользователю оно не нужно, на метрики ведёт ссылка внизу главной (screens.start). Адрес /metrics работает.
+# Если дополнительных страниц нет, приложение запускается как раньше.
 extra = [st.Page(p, title=title, url_path=slug) for slug, title, p in
          (("metrics", "Метрики", HERE / "pages" / "2_metrics.py"),) if p.exists()]
+screens.METRICS_PAGE = extra[0] if extra else None
 if extra:
-    st.navigation([st.Page(app_page, title="Приложение", default=True), *extra]).run()
+    home = st.Page(app_page, title="Приложение", default=True)
+    page = st.navigation([home, *extra], position="hidden")
+    if page.url_path != home.url_path:  # на странице метрик меню нет, поэтому сверху ссылка обратно к агенту
+        st.page_link(home, label="← К поиску поездки")
+    page.run()
 else:
     app_page()
