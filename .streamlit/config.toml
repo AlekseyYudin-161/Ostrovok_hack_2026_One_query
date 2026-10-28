@@ -5,6 +5,8 @@ backgroundColor = "#F5F5F7"
 secondaryBackgroundColor = "#FFFFFF"
 textColor = "#14161F"
 font = "sans serif"
+baseRadius = "14px"
+buttonRadius = "14px"
 
 [client]
 toolbarMode = "minimal"
