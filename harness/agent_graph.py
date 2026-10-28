@@ -801,9 +801,9 @@ class GraphAgent:
             return {"answer": answer.model_dump(mode="json")}
         pending = {"tool": "addon_mock", "addon": kind, "booking_ref": booking["ref"], "hotel_id": booking["hotel_id"],
                    "name": booking["name"], "price_total": fee}
-        answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, pending_action=pending,
-                             text=f"{std}{what.capitalize()} в «{booking['name']}» — {rub(fee)}. "
-                                  f"Добавить к брони {booking['ref']}? Ответьте «да» или «нет» (демо-оплата).")
+        question = (f"{std}{what.capitalize()} в «{booking['name']}» — {rub(fee)}. "
+                    f"Добавить к брони {booking['ref']}? Ответьте «да» или «нет» (демо-оплата).")
+        answer = AgentAnswer(mode=AgentMode.CONFIRM_ACTION, pending_action=pending, text=question, questions=[question])
         return {"answer": answer.model_dump(mode="json")}
 
     @staticmethod
@@ -826,7 +826,8 @@ class GraphAgent:
                        "price_total": it["total_price"]}
             text = (f"Оформить вариант {choice} «{it['hotel']['hotel']['name']}» и дорогу за "
                     f"{rub(it['total_price'])}? Ответьте «да» или «нет» (демо-оплата).")
-            return {"answer": {**state["answer"], "text": text, "pending_action": pending}, "reask": True}
+            return {"answer": {**state["answer"], "text": text, "pending_action": pending, "questions": [text]},
+                    "reask": True}
         if decision is False:
             if addon:
                 answer = AgentAnswer(mode=AgentMode.PLAN, text=f"Хорошо, не добавляю. Бронь {state['booking']['ref']} "
@@ -847,14 +848,15 @@ class GraphAgent:
                 return {"answer": {**state["answer"], "pending_action": pending}, "reask": False}
             text = (f"Оформить вариант {pick.choice} «{it['hotel']['hotel']['name']}» и дорогу за "
                     f"{rub(it['total_price'])}? Ответьте «да» или «нет» (демо-оплата).")
-            return {"answer": {**state["answer"], "text": text, "pending_action": pending}, "reask": True}
+            return {"answer": {**state["answer"], "text": text, "pending_action": pending, "questions": [text]},
+                    "reask": True}
         if pick.ambiguous or pick.unknown or not decision:  # не поняли, какой вариант, — не покупаем наугад
             head = (f"Этот отель есть в вариантах {', '.join(map(str, pick.ambiguous))}. " if pick.ambiguous
                     else "Не понял, какой вариант оформить. ")
             log.info("confirm: выбор не понят (%s, %s) — переспрашиваю", pick.ambiguous, pick.unknown)
             text = head + (f"Ответьте «да, вариант N» (1–{len(its)}) или «нет»." if len(its) > 1
                            else "Ответьте «да» или «нет».")
-            return {"answer": {**state["answer"], "text": text}, "reask": True}
+            return {"answer": {**state["answer"], "text": text, "questions": [text]}, "reask": True}
         return {"reask": False}
 
     @staticmethod
@@ -1058,7 +1060,9 @@ class GraphAgent:
                         yield ev("purchase", node, booking_ref=(out["answer"].get("plan") or {}).get("booking_ref"))
                     answer = out["answer"]
                     if guard and guard.categories:           # запрос выполнили, атаку проигнорировали — говорим об этом
+                        note = Assumption(field="security", value=guard.categories, reason=NOTE).model_dump(mode="json")
                         answer = {**answer, "text": f"{NOTE}\n{answer['text']}",
+                                  "assumptions": [note, *answer.get("assumptions", [])],   # UI показывает допущения
                                   "violations": [*answer.get("violations", []),
                                                  *(f"prompt_injection:{c}" for c in guard.categories)]}
                     if leaks(answer["text"], [system_prompt(self.today)]):   # страховка на выходе
